@@ -1,0 +1,27 @@
+# permissions for end users to view drivers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: driver-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: docker-machine-operator
+    app.kubernetes.io/part-of: docker-machine-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: driver-viewer-role
+rules:
+- apiGroups:
+  - docker-machine.klusters.dev
+  resources:
+  - drivers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - docker-machine.klusters.dev
+  resources:
+  - drivers/status
+  verbs:
+  - get

@@ -1,0 +1,12 @@
+apiVersion: docker-machine.klusters.dev/v1alpha1
+kind: Driver
+metadata:
+  labels:
+    app.kubernetes.io/name: driver
+    app.kubernetes.io/instance: driver-sample
+    app.kubernetes.io/part-of: docker-machine-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: docker-machine-operator
+  name: driver-sample
+spec:
+  # TODO(user): Add fields here

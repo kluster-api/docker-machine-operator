@@ -1,0 +1,58 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - docker-machine.klusters.dev
+  resources:
+  - drivers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - docker-machine.klusters.dev
+  resources:
+  - drivers/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - docker-machine.klusters.dev
+  resources:
+  - drivers/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - docker-machine.klusters.dev
+  resources:
+  - machines
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - docker-machine.klusters.dev
+  resources:
+  - machines/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - docker-machine.klusters.dev
+  resources:
+  - machines/status
+  verbs:
+  - get
+  - patch
+  - update
