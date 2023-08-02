@@ -34,10 +34,12 @@ spec:
           spec:
             description: DriverSpec defines the desired state of Driver
             properties:
-              foo:
-                description: Foo is an example field of Driver. Edit driver_types.go
-                  to remove/update
+              builtin:
+                type: boolean
+              downloadURL:
                 type: string
+            required:
+            - builtin
             type: object
           status:
             description: DriverStatus defines the observed state of Driver

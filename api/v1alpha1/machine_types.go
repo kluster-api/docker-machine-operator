@@ -17,25 +17,31 @@ limitations under the License.
 package v1alpha1
 
 import (
+	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	kmapi "kmodules.xyz/client-go/api/v1"
 )
-
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // MachineSpec defines the desired state of Machine
 type MachineSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of Machine. Edit machine_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	DriverRef  *core.LocalObjectReference `json:"driverRef"`
+	ScriptRef  *core.LocalObjectReference `json:"scriptRef"`
+	Parameters map[string]string          `json:"parameters"`
 }
+
+type MachinePhase string
+
+const (
+	MachinePhasePending     MachinePhase = "Pending"
+	MachinePhaseInProgress  MachinePhase = "InProgress"
+	MachinePhaseTerminating MachinePhase = "Terminating"
+	MachinePhaseFailed      MachinePhase = "Failed"
+)
 
 // MachineStatus defines the observed state of Machine
 type MachineStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	Conditions []kmapi.Conditions `json:"conditions"`
+	Phase      MachinePhase       `json:"phase"`
 }
 
 //+kubebuilder:object:root=true
