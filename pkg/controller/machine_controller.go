@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"github.com/go-logr/logr"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -30,7 +31,9 @@ import (
 // MachineReconciler reconciles a Machine object
 type MachineReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	log        logr.Logger
+	machineObj *dockermachinev1alpha1.Machine
+	Scheme     *runtime.Scheme
 }
 
 //+kubebuilder:rbac:groups=docker-machine.klusters.dev,resources=machines,verbs=get;list;watch;create;update;patch;delete
@@ -47,9 +50,26 @@ type MachineReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.15.0/pkg/reconcile
 func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	r.log = log.FromContext(ctx)
 
-	// TODO(user): your logic here
+	var machine dockermachinev1alpha1.Machine
+	if err := r.Get(ctx, req.NamespacedName, &machine); err != nil {
+		r.log.Error(err, "unable to fetch machine object")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+	r.machineObj = machine.DeepCopy()
+
+	driver := r.machineObj.Spec.DriverRef.Name
+	switch driver {
+	case "google":
+		return r.createGoogleMachine()
+	case "amazonec2":
+		return r.createAWSMachine()
+	case "azure":
+		return r.createAzureMachine()
+	default:
+		r.log.Info("No driver found ", "driver name", driver)
+	}
 
 	return ctrl.Result{}, nil
 }
