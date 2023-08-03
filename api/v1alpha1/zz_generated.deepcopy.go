@@ -185,7 +185,7 @@ func (in *MachineSpec) DeepCopyInto(out *MachineSpec) {
 	}
 	if in.ScriptRef != nil {
 		in, out := &in.ScriptRef, &out.ScriptRef
-		*out = new(v1.LocalObjectReference)
+		*out = new(apiv1.ObjectReference)
 		**out = **in
 	}
 	if in.Parameters != nil {

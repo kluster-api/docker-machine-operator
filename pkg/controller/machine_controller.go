@@ -61,11 +61,11 @@ func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	driver := r.machineObj.Spec.DriverRef.Name
 	switch driver {
-	case "google":
+	case GoogleDriver:
 		return r.createGoogleMachine()
-	case "amazonec2":
+	case AWSDriver:
 		return r.createAWSMachine()
-	case "azure":
+	case AzureDriver:
 		return r.createAzureMachine()
 	default:
 		r.log.Info("No driver found ", "driver name", driver)

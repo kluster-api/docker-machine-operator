@@ -1,15 +1,18 @@
 apiVersion: docker-machine.klusters.dev/v1alpha1
 kind: Machine
 metadata:
-  name: machine-sample
+  name: rancher-vm
   namespace: demo
 spec:
   driverRef:
     name: google
   scriptRef:
     name: gcpscript
+    namespace: demo
   parameters:
     "google-project": "appscode-testing"
-    "google-zone": "us-central1"
+    "google-zone": "us-central1-a"
     "google-machine-type": "n1-standard-2"
     "google-machine-image": "ubuntu-os-cloud/global/images/ubuntu-2204-jammy-v20230714"
+
+
