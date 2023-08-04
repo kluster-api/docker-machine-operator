@@ -24,8 +24,9 @@ import (
 
 // MachineSpec defines the desired state of Machine
 type MachineSpec struct {
-	DriverRef  *core.LocalObjectReference `json:"driverRef"`
+	Driver     *core.LocalObjectReference `json:"driver"`
 	ScriptRef  *kmapi.ObjectReference     `json:"scriptRef"`
+	AuthSecret *kmapi.ObjectReference     `json:"authSecret"`
 	Parameters map[string]string          `json:"parameters"`
 }
 

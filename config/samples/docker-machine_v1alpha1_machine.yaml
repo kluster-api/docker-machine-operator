@@ -4,8 +4,11 @@ metadata:
   name: rancher-vm
   namespace: demo
 spec:
-  driverRef:
+  driver:
     name: google
+  authSecret:
+    name: gcp-cred
+    namespace: demo
   scriptRef:
     name: gcpscript
     namespace: demo

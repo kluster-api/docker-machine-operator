@@ -59,7 +59,7 @@ func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	r.machineObj = machine.DeepCopy()
 
-	driver := r.machineObj.Spec.DriverRef.Name
+	driver := r.machineObj.Spec.Driver.Name
 	switch driver {
 	case GoogleDriver:
 		return r.createGoogleMachine()
