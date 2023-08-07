@@ -60,15 +60,9 @@ func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	r.machineObj = machine.DeepCopy()
 
 	driver := r.machineObj.Spec.Driver.Name
-	switch driver {
-	case GoogleDriver:
-		return r.createGoogleMachine()
-	case AWSDriver:
-		return r.createAWSMachine()
-	case AzureDriver:
-		return r.createAzureMachine()
-	default:
-		r.log.Info("No driver found ", "driver name", driver)
+	err := r.createMachine(driver)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil

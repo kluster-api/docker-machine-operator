@@ -217,15 +217,9 @@ func (in *MachineStatus) DeepCopyInto(out *MachineStatus) {
 	*out = *in
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]apiv1.Conditions, len(*in))
+		*out = make([]apiv1.Condition, len(*in))
 		for i := range *in {
-			if (*in)[i] != nil {
-				in, out := &(*in)[i], &(*out)[i]
-				*out = make(apiv1.Conditions, len(*in))
-				for i := range *in {
-					(*in)[i].DeepCopyInto(&(*out)[i])
-				}
-			}
+			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
 }

@@ -1,3 +1,6 @@
+# github.com/appscode/go v0.0.0-20201105063637-5613f3b8169f
+## explicit; go 1.12
+github.com/appscode/go/crypto/rand
 # github.com/beorn7/perks v1.0.1
 ## explicit; go 1.11
 github.com/beorn7/perks/quantile
@@ -230,6 +233,9 @@ golang.org/x/tools/internal/typeparams
 # gomodules.xyz/jsonpatch/v2 v2.3.0
 ## explicit; go 1.20
 gomodules.xyz/jsonpatch/v2
+# gomodules.xyz/password-generator v0.2.4
+## explicit; go 1.15
+gomodules.xyz/password-generator
 # google.golang.org/appengine v1.6.7
 ## explicit; go 1.11
 google.golang.org/appengine/internal

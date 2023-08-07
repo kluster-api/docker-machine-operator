@@ -3,6 +3,10 @@ module go.klusters.dev/docker-machine-operator
 go 1.20
 
 require (
+<<<<<<< HEAD
+=======
+	github.com/appscode/go v0.0.0-20201105063637-5613f3b8169f
+>>>>>>> d352293e (Add Generic functions for all clouds)
 	github.com/go-logr/logr v1.2.4
 	github.com/onsi/ginkgo/v2 v2.9.5
 	github.com/onsi/gomega v1.27.7
@@ -58,6 +62,7 @@ require (
 	golang.org/x/time v0.3.0 // indirect
 	golang.org/x/tools v0.9.1 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.3.0 // indirect
+	gomodules.xyz/password-generator v0.2.4 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect

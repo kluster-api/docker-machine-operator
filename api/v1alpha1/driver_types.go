@@ -22,7 +22,8 @@ import (
 
 // DriverSpec defines the desired state of Driver
 type DriverSpec struct {
-	Builtin     bool   `json:"builtin"`
+	Builtin bool `json:"builtin"`
+	// +optional
 	DownloadURL string `json:"downloadURL,omitempty"`
 }
 
