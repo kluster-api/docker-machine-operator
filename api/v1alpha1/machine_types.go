@@ -20,7 +20,6 @@ import (
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kmapi "kmodules.xyz/client-go/api/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // MachineSpec defines the desired state of Machine
@@ -30,15 +29,6 @@ type MachineSpec struct {
 	AuthSecret *kmapi.ObjectReference     `json:"authSecret"`
 	Parameters map[string]string          `json:"parameters"`
 }
-
-type MachinePhase string
-
-const (
-	MachinePhasePending     MachinePhase = "Pending"
-	MachinePhaseInProgress  MachinePhase = "InProgress"
-	MachinePhaseTerminating MachinePhase = "Terminating"
-	MachinePhaseFailed      MachinePhase = "Failed"
-)
 
 // MachineStatus defines the observed state of Machine
 type MachineStatus struct {
@@ -70,16 +60,6 @@ type MachineList struct {
 func init() {
 	SchemeBuilder.Register(&Machine{}, &MachineList{})
 }
-
-// +k8s:deepcopy-gen=false
-type MachineInterface interface {
-	client.Object
-	GetStatus() *MachineStatus
-	GetConditions() kmapi.Conditions
-	SetConditions(conditions kmapi.Conditions)
-}
-
-var _ MachineInterface = &Machine{}
 
 func (in *Machine) GetStatus() *MachineStatus {
 	return &in.Status

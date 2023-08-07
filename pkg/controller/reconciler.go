@@ -29,7 +29,6 @@ func (r *MachineReconciler) createMachine(driverName string) error {
 }
 
 func (r *MachineReconciler) getMachineCreationArgs(driverName string) ([]string, error) {
-
 	var args []string
 	args = append(args, "create", "--driver", driverName)
 

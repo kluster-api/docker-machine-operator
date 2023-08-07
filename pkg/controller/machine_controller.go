@@ -25,14 +25,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	dockermachinev1alpha1 "go.klusters.dev/docker-machine-operator/api/v1alpha1"
+	cutil "kmodules.xyz/client-go/conditions"
+	"kmodules.xyz/client-go/conditions/committer"
+
+	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
 )
 
 // MachineReconciler reconciles a Machine object
 type MachineReconciler struct {
 	client.Client
 	log        logr.Logger
-	machineObj *dockermachinev1alpha1.Machine
+	machineObj *api.Machine
 	Scheme     *runtime.Scheme
 }
 
@@ -52,7 +55,13 @@ type MachineReconciler struct {
 func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.log = log.FromContext(ctx)
 
-	var machine dockermachinev1alpha1.Machine
+	commit := committer.NewStatusCommitter[*api.Machine, *api.MachineSpec, *api.MachineStatus](
+		func(ns string) committer.Patcher[*api.Machine] {
+			return r.Client.Status()
+		},
+	)
+
+	var machine api.Machine
 	if err := r.Get(ctx, req.NamespacedName, &machine); err != nil {
 		r.log.Error(err, "unable to fetch machine object")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -64,13 +73,15 @@ func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	cutil.SetSummary(r.machineObj, cutil.WithConditions(api.ConditionsOrder()...))
+	r.machineObj.Status.Phase = api.GetPhase(r.machineObj)
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, commit(ctx, &machine, r.machineObj)
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&dockermachinev1alpha1.Machine{}).
+		For(&api.Machine{}).
 		Complete(r)
 }

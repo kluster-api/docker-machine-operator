@@ -84,10 +84,8 @@ type CRDInstallOptions struct {
 	WebhookOptions WebhookInstallOptions
 }
 
-const (
-	defaultPollInterval = 100 * time.Millisecond
-	defaultMaxWait      = 10 * time.Second
-)
+const defaultPollInterval = 100 * time.Millisecond
+const defaultMaxWait = 10 * time.Second
 
 // InstallCRDs installs a collection of CRDs into a cluster by reading the crd yaml files from a directory.
 func InstallCRDs(config *rest.Config, options CRDInstallOptions) ([]*apiextensionsv1.CustomResourceDefinition, error) {
@@ -144,7 +142,7 @@ func defaultCRDOptions(o *CRDInstallOptions) {
 // WaitForCRDs waits for the CRDs to appear in discovery.
 func WaitForCRDs(config *rest.Config, crds []*apiextensionsv1.CustomResourceDefinition, options CRDInstallOptions) error {
 	// Add each CRD to a map of GroupVersion to Resource
-	waitingFor := map[schema.GroupVersion]*sets.Set[string]{}
+	waitingFor := map[schema.GroupVersion]*sets.String{}
 	for _, crd := range crds {
 		gvs := []schema.GroupVersion{}
 		for _, version := range crd.Spec.Versions {
@@ -157,7 +155,7 @@ func WaitForCRDs(config *rest.Config, crds []*apiextensionsv1.CustomResourceDefi
 			log.V(1).Info("adding API in waitlist", "GV", gv)
 			if _, found := waitingFor[gv]; !found {
 				// Initialize the set
-				waitingFor[gv] = &sets.Set[string]{}
+				waitingFor[gv] = &sets.String{}
 			}
 			// Add the Resource
 			waitingFor[gv].Insert(crd.Spec.Names.Plural)
@@ -166,7 +164,7 @@ func WaitForCRDs(config *rest.Config, crds []*apiextensionsv1.CustomResourceDefi
 
 	// Poll until all resources are found in discovery
 	p := &poller{config: config, waitingFor: waitingFor}
-	return wait.PollUntilContextTimeout(context.TODO(), options.PollInterval, options.MaxTime, true, p.poll)
+	return wait.PollImmediate(options.PollInterval, options.MaxTime, p.poll)
 }
 
 // poller checks if all the resources have been found in discovery, and returns false if not.
@@ -175,11 +173,11 @@ type poller struct {
 	config *rest.Config
 
 	// waitingFor is the map of resources keyed by group version that have not yet been found in discovery
-	waitingFor map[schema.GroupVersion]*sets.Set[string]
+	waitingFor map[schema.GroupVersion]*sets.String
 }
 
 // poll checks if all the resources have been found in discovery, and returns false if not.
-func (p *poller) poll(ctx context.Context) (done bool, err error) {
+func (p *poller) poll() (done bool, err error) {
 	// Create a new clientset to avoid any client caching of discovery
 	cs, err := clientset.NewForConfig(p.config)
 	if err != nil {
@@ -364,7 +362,7 @@ func modifyConversionWebhooks(crds []*apiextensionsv1.CustomResourceDefinition, 
 	if err != nil {
 		return err
 	}
-	url := pointer.String(fmt.Sprintf("https://%s/convert", hostPort))
+	url := pointer.StringPtr(fmt.Sprintf("https://%s/convert", hostPort))
 
 	for i := range crds {
 		// Continue if we're preserving unknown fields.
