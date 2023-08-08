@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/appscode/go/crypto/rand"
+	"github.com/pkg/errors"
 	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
 	core "k8s.io/api/core/v1"
 	kmapi "kmodules.xyz/client-go/api/v1"
@@ -16,6 +17,9 @@ import (
 const scriptFileDirectory = "/tmp/"
 
 func (r *MachineReconciler) createMachine(driverName string) error {
+	if cutil.IsConditionTrue(r.machineObj.Status.Conditions, api.MachineConditionMachineCreating) {
+		return nil
+	}
 	r.log.Info("Creating Google Compute Engine")
 	args, err := r.getMachineCreationArgs(driverName)
 	if err != nil {
@@ -23,9 +27,10 @@ func (r *MachineReconciler) createMachine(driverName string) error {
 	}
 	cutil.MarkTrue(r.machineObj, api.MachineConditionMachineCreating)
 	cmd := exec.Command("docker-machine", args...)
+	fmt.Println(args)
 	err = cmd.Run()
 	if err != nil {
-		r.log.Error(err, "can not create machine")
+		fmt.Println(err.Error())
 		cutil.MarkFalse(r.machineObj, api.MachineConditionTypeMachineReady, err.Error(), kmapi.ConditionSeverityError,
 			"Unable to create docker machine")
 		return err
@@ -89,8 +94,13 @@ func (r *MachineReconciler) getStartupScriptArgs() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	var fileName string
+	if _, ok := r.machineObj.Annotations["script-file"]; ok {
+		fileName = r.machineObj.Annotations["script-file"]
+	} else {
+		fileName = fmt.Sprintf("%s.sh", rand.WithUniqSuffix("script"))
+	}
 
-	fileName := fmt.Sprintf("%s.sh", rand.WithUniqSuffix("script"))
 	filePath := scriptFileDirectory + fileName
 
 	var userDataKey, userDataValue string
@@ -105,13 +115,24 @@ func (r *MachineReconciler) getStartupScriptArgs() ([]string, error) {
 		cutil.MarkTrue(r.machineObj, api.MachineConditionScriptDataNotFound)
 		return nil, fmt.Errorf("script data not found")
 	}
+	scriptArgs := []string{fmt.Sprintf("--%s", userDataKey)}
+	scriptArgs = append(scriptArgs, filePath)
+
+	_, err = os.Stat(filePath)
+	if err == nil {
+		return scriptArgs, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+
 	err = os.WriteFile(filePath, []byte(userDataValue), 0644)
 	if err != nil {
 		return nil, err
 	}
 
-	scriptArgs := []string{fmt.Sprintf("--%s", userDataKey)}
-	scriptArgs = append(scriptArgs, filePath)
+	r.machineObj.Annotations["script-file"] = fileName
+
 	return scriptArgs, nil
 }
 
