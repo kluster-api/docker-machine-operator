@@ -17,10 +17,12 @@ FROM {ARG_FROM}
 LABEL org.opencontainers.image.source https://github.com/cluster-api/docker-machine-operator
 
 RUN set -x \
-  && apk add --update --upgrade --no-cache pcre2 ca-certificates tzdata \
+  && apk add --update --upgrade --no-cache pcre2 ca-certificates tzdata openssh-client \
   && echo 'Etc/UTC' > /etc/timezone
 
 ADD bin/{ARG_BIN}-{ARG_OS}-{ARG_ARCH} /{ARG_BIN}
+
+COPY docker-machine /bin/docker-machine
 
 USER 65534
 

@@ -1,0 +1,75 @@
+package controller
+
+import (
+	"context"
+	"fmt"
+	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
+	kutil "kmodules.xyz/client-go"
+	cu "kmodules.xyz/client-go/client"
+	"os"
+	"os/exec"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+)
+
+const (
+	GoogleDriver string = "google"
+	AWSDriver    string = "amazonec2"
+	AzureDriver  string = "azure"
+)
+
+func (r *MachineReconciler) ensureFinalizer() error {
+	finalizerName := api.GetFinalizer()
+	if !controllerutil.ContainsFinalizer(r.machineObj, finalizerName) {
+		if err := r.patchFinalizer(kutil.VerbCreated, finalizerName); err != nil {
+			return err
+		}
+		r.log.Info(fmt.Sprintf("Finalizer %v added", finalizerName))
+	}
+
+	return nil
+}
+
+func (r *MachineReconciler) processFinalizer() error {
+	finalizerName := api.GetFinalizer()
+	if controllerutil.ContainsFinalizer(r.machineObj, finalizerName) {
+		if err := r.cleanupMachineResources(); err != nil {
+			return err
+		}
+
+		if err := r.patchFinalizer(kutil.VerbDeleted, finalizerName); err != nil {
+			return err
+		}
+		r.log.Info(fmt.Sprintf("Finalizer %v removed", finalizerName))
+	}
+	return nil
+}
+
+func (r *MachineReconciler) patchFinalizer(verbType kutil.VerbType, finalizerName string) error {
+	_, err := cu.CreateOrPatch(context.TODO(), r.Client, r.machineObj, func(object client.Object, createOp bool) client.Object {
+		if verbType == kutil.VerbCreated {
+			controllerutil.AddFinalizer(object, finalizerName)
+		} else if verbType == kutil.VerbDeleted {
+			controllerutil.RemoveFinalizer(object, finalizerName)
+		}
+		return object
+	})
+	return err
+}
+
+func (r *MachineReconciler) cleanupMachineResources() error {
+	scriptFilePath := scriptFileDirectory + r.scriptFileName
+	err := os.Remove(scriptFilePath)
+	if err != nil && os.IsExist(err) {
+		return err
+	}
+
+	args := []string{"rm", r.machineObj.Name}
+	cmd := exec.Command("docker-machine", args...)
+	err = cmd.Run()
+	if err != nil {
+		fmt.Println(err.Error())
+		return client.IgnoreNotFound(err)
+	}
+	return nil
+}

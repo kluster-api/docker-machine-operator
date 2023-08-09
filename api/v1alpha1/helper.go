@@ -42,6 +42,9 @@ func GetPhase(obj *Machine) MachinePhase {
 		return MachinePhaseTerminating
 	}
 	conditions := obj.GetConditions()
+	if len(conditions) == 0 {
+		return MachinePhasePending
+	}
 	var cond kmapi.Condition
 	for i, _ := range conditions {
 		c := conditions[i]
@@ -66,4 +69,7 @@ func GetPhase(obj *Machine) MachinePhase {
 		return MachinePhaseInProgress
 	}
 	return MachinePhaseSuccess
+}
+func GetFinalizer() string {
+	return GroupVersion.Group
 }

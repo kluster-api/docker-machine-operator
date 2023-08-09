@@ -5,9 +5,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/appscode/go/crypto/rand"
-	"github.com/pkg/errors"
 	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
 	core "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	kmapi "kmodules.xyz/client-go/api/v1"
 	cutil "kmodules.xyz/client-go/conditions"
 	"os"
@@ -16,12 +16,22 @@ import (
 
 const scriptFileDirectory = "/tmp/"
 
-func (r *MachineReconciler) createMachine(driverName string) error {
+func (r *MachineReconciler) reconcileDockerMachine() error {
+	if r.machineObj.Status.Phase == api.MachinePhaseSuccess {
+		// Now wait for the cluster to be created
+		fmt.Println("Machine Created Successfully")
+	} else {
+		return r.createMachine()
+	}
+	return nil
+}
+
+func (r *MachineReconciler) createMachine() error {
 	if cutil.IsConditionTrue(r.machineObj.Status.Conditions, api.MachineConditionMachineCreating) {
 		return nil
 	}
 	r.log.Info("Creating Google Compute Engine")
-	args, err := r.getMachineCreationArgs(driverName)
+	args, err := r.getMachineCreationArgs()
 	if err != nil {
 		return err
 	}
@@ -40,9 +50,9 @@ func (r *MachineReconciler) createMachine(driverName string) error {
 	return nil
 }
 
-func (r *MachineReconciler) getMachineCreationArgs(driverName string) ([]string, error) {
+func (r *MachineReconciler) getMachineCreationArgs() ([]string, error) {
 	var args []string
-	args = append(args, "create", "--driver", driverName)
+	args = append(args, "create", "--driver", r.machineObj.Spec.Driver.Name)
 
 	for k, v := range r.machineObj.Spec.Parameters {
 		args = append(args, fmt.Sprintf("--%s", k))
@@ -73,13 +83,16 @@ func (r *MachineReconciler) getMachineCreationArgs(driverName string) ([]string,
 func (r *MachineReconciler) getAuthSecretArgs() ([]string, error) {
 	authSecret, err := r.getSecret(r.machineObj.Spec.AuthSecret)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			cutil.MarkFalse(r.machineObj, api.MachineConditionTypeAuthDataReady, api.MachineConditionScriptDataNotFound, kmapi.ConditionSeverityError, "unable to read auth data")
+			return nil, nil
+		}
 		return nil, err
 	}
 	var authArgs []string
 	for key, value := range authSecret.Data {
 		data := base64.StdEncoding.EncodeToString(value)
 		if len(data) == 0 || len(key) == 0 {
-			cutil.MarkTrue(r.machineObj, api.MachineConditionAuthDataNotFound)
 			return nil, fmt.Errorf("auth secret not found")
 		}
 		authArgs = append(authArgs, fmt.Sprintf("--%s", key))
@@ -90,13 +103,17 @@ func (r *MachineReconciler) getAuthSecretArgs() ([]string, error) {
 }
 
 func (r *MachineReconciler) getStartupScriptArgs() ([]string, error) {
-	scriptScret, err := r.getSecret(r.machineObj.Spec.ScriptRef)
+	scriptSecret, err := r.getSecret(r.machineObj.Spec.ScriptRef)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			cutil.MarkFalse(r.machineObj, api.MachineConditionTypeScriptReady, api.MachineConditionScriptDataNotFound, kmapi.ConditionSeverityError, "unable to create script")
+			return nil, nil
+		}
 		return nil, err
 	}
 	var fileName string
-	if _, ok := r.machineObj.Annotations["script-file"]; ok {
-		fileName = r.machineObj.Annotations["script-file"]
+	if r.scriptFileName != "" {
+		fileName = r.scriptFileName
 	} else {
 		fileName = fmt.Sprintf("%s.sh", rand.WithUniqSuffix("script"))
 	}
@@ -104,7 +121,7 @@ func (r *MachineReconciler) getStartupScriptArgs() ([]string, error) {
 	filePath := scriptFileDirectory + fileName
 
 	var userDataKey, userDataValue string
-	for key, value := range scriptScret.Data {
+	for key, value := range scriptSecret.Data {
 		userDataKey = key
 		userDataValue = string(value)
 		if len(userDataKey) > 0 {
@@ -112,7 +129,6 @@ func (r *MachineReconciler) getStartupScriptArgs() ([]string, error) {
 		}
 	}
 	if len(userDataKey) == 0 || len(userDataValue) == 0 {
-		cutil.MarkTrue(r.machineObj, api.MachineConditionScriptDataNotFound)
 		return nil, fmt.Errorf("script data not found")
 	}
 	scriptArgs := []string{fmt.Sprintf("--%s", userDataKey)}
@@ -122,7 +138,7 @@ func (r *MachineReconciler) getStartupScriptArgs() ([]string, error) {
 	if err == nil {
 		return scriptArgs, nil
 	}
-	if !errors.Is(err, os.ErrNotExist) {
+	if !os.IsNotExist(err) {
 		return nil, err
 	}
 
@@ -130,9 +146,7 @@ func (r *MachineReconciler) getStartupScriptArgs() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	r.machineObj.Annotations["script-file"] = fileName
-
+	r.scriptFileName = fileName
 	return scriptArgs, nil
 }
 

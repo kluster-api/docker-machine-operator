@@ -19,13 +19,13 @@ package controller
 import (
 	"context"
 	"github.com/go-logr/logr"
+	cutil "kmodules.xyz/client-go/conditions"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	cutil "kmodules.xyz/client-go/conditions"
 	"kmodules.xyz/client-go/conditions/committer"
 
 	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
@@ -34,9 +34,10 @@ import (
 // MachineReconciler reconciles a Machine object
 type MachineReconciler struct {
 	client.Client
-	log        logr.Logger
-	machineObj *api.Machine
-	Scheme     *runtime.Scheme
+	log            logr.Logger
+	machineObj     *api.Machine
+	Scheme         *runtime.Scheme
+	scriptFileName string
 }
 
 //+kubebuilder:rbac:groups=docker-machine.klusters.dev,resources=machines,verbs=get;list;watch;create;update;patch;delete
@@ -45,7 +46,6 @@ type MachineReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
 // the Machine object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
@@ -68,13 +68,26 @@ func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	r.machineObj = machine.DeepCopy()
 
-	driver := r.machineObj.Spec.Driver.Name
-	err := r.createMachine(driver)
-	if err != nil {
-		return ctrl.Result{}, err
+	if !r.machineObj.GetDeletionTimestamp().IsZero() {
+		// Deletion timestamp is set. Cleanup and delete
+		err := r.processFinalizer()
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
 	}
+
 	cutil.SetSummary(r.machineObj, cutil.WithConditions(api.ConditionsOrder()...))
 	r.machineObj.Status.Phase = api.GetPhase(r.machineObj)
+
+	err := r.reconcileDockerMachine()
+	if err != nil {
+		cErr := commit(ctx, &machine, r.machineObj)
+		if cErr != nil {
+			return ctrl.Result{}, cErr
+		}
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, commit(ctx, &machine, r.machineObj)
 }
