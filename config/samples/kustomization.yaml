@@ -1,5 +1,0 @@
-## Append samples of your project ##
-resources:
-- docker-machine_v1alpha1_driver.yaml
-- docker-machine_v1alpha1_machine.yaml
-#+kubebuilder:scaffold:manifestskustomizesamples
