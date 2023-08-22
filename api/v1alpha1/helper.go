@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kmapi "kmodules.xyz/client-go/api/v1"
 )
@@ -64,7 +65,7 @@ func GetPhase(obj *Machine) MachinePhase {
 		return MachinePhasePending
 	}
 	var cond kmapi.Condition
-	for i, _ := range conditions {
+	for i := range conditions {
 		c := conditions[i]
 		if c.Type == kmapi.ReadyCondition {
 			cond = c
@@ -88,6 +89,7 @@ func GetPhase(obj *Machine) MachinePhase {
 	}
 	return MachinePhaseSuccess
 }
+
 func GetFinalizer() string {
 	return GroupVersion.Group
 }

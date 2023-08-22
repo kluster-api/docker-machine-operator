@@ -18,12 +18,14 @@ package main
 
 import (
 	"fmt"
-	_ "go.bytebuilders.dev/license-verifier/info"
+	"os"
+
 	"go.klusters.dev/docker-machine-operator/pkg/cmds"
+
+	_ "go.bytebuilders.dev/license-verifier/info"
 	"gomodules.xyz/logs"
 	_ "k8s.io/client-go/kubernetes/fake"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	"os"
 )
 
 func main() {

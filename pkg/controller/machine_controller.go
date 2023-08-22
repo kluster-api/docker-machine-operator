@@ -18,17 +18,15 @@ package controller
 
 import (
 	"context"
-	"github.com/go-logr/logr"
-	cutil "kmodules.xyz/client-go/conditions"
 
+	"github.com/go-logr/logr"
+	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
+	cutil "kmodules.xyz/client-go/conditions"
+	"kmodules.xyz/client-go/conditions/committer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	"kmodules.xyz/client-go/conditions/committer"
-
-	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
 )
 
 // MachineReconciler reconciles a Machine object

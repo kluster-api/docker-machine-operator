@@ -20,14 +20,15 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
+	"os/exec"
+
 	"github.com/appscode/go/crypto/rand"
 	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	kmapi "kmodules.xyz/client-go/api/v1"
 	cutil "kmodules.xyz/client-go/conditions"
-	"os"
-	"os/exec"
 )
 
 const scriptFileDirectory = "/tmp/"
@@ -36,6 +37,10 @@ func (r *MachineReconciler) createMachine() error {
 	r.log.Info("Creating Machine", "Cloud", r.machineObj.Spec.Driver)
 	if cutil.IsConditionTrue(r.machineObj.Status.Conditions, api.MachineConditionMachineCreating) {
 		return nil
+	}
+	err := r.createPrerequisitesForMachine()
+	if err != nil {
+		return err
 	}
 	args, err := r.getMachineCreationArgs()
 	if err != nil {

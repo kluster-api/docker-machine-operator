@@ -19,11 +19,12 @@ package controller
 import (
 	"bufio"
 	"fmt"
-	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
-	cutil "kmodules.xyz/client-go/conditions"
 	"os"
 	"os/exec"
 	"strconv"
+
+	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
+	cutil "kmodules.xyz/client-go/conditions"
 )
 
 func (r *MachineReconciler) isScriptFinished() error {

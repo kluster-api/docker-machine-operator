@@ -19,11 +19,12 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+
 	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
 	kutil "kmodules.xyz/client-go"
 	cu "kmodules.xyz/client-go/client"
-	"os"
-	"os/exec"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -46,7 +47,7 @@ func (r *MachineReconciler) ensureFinalizer() error {
 	return nil
 }
 
-func (r *MachineReconciler) processFinalizer() error {
+func (r *MachineReconciler) removeFinalizerAfterCleanup() error {
 	finalizerName := api.GetFinalizer()
 	if controllerutil.ContainsFinalizer(r.machineObj, finalizerName) {
 		if err := r.cleanupMachineResources(); err != nil {
@@ -57,6 +58,22 @@ func (r *MachineReconciler) processFinalizer() error {
 			return err
 		}
 		r.log.Info(fmt.Sprintf("Finalizer %v removed", finalizerName))
+	}
+	return nil
+}
+
+func (r *MachineReconciler) processFinalizer() error {
+	if r.machineObj.DeletionTimestamp.IsZero() {
+		err := r.ensureFinalizer()
+		if err != nil {
+			return err
+		}
+	} else {
+		// Machine Object is Deleted
+		err := r.removeFinalizerAfterCleanup()
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -17,20 +17,17 @@ limitations under the License.
 package cmds
 
 import (
-	"go.klusters.dev/docker-machine-operator/pkg/controller"
-	"k8s.io/klog/v2"
 	"os"
 
-	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
-	// to ensure that exec-entrypoint and run can make use of them.
 	"github.com/spf13/cobra"
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
-
 	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
+	"go.klusters.dev/docker-machine-operator/pkg/controller"
 	v "gomodules.xyz/x/version"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/klogr"
 	"kmodules.xyz/client-go/meta"
 	"kmodules.xyz/client-go/tools/clusterid"
