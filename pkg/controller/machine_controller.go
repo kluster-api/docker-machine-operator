@@ -92,6 +92,14 @@ func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	return ctrl.Result{}, commit(ctx, &machine, r.machineObj)
 }
 
+func (r *MachineReconciler) reconcileDockerMachine() error {
+	if r.machineObj.Status.Phase == api.MachinePhaseSuccess {
+		return r.isScriptFinished()
+	} else {
+		return r.createMachine()
+	}
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *MachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).

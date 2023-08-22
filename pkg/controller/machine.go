@@ -16,28 +16,17 @@ import (
 
 const scriptFileDirectory = "/tmp/"
 
-func (r *MachineReconciler) reconcileDockerMachine() error {
-	if r.machineObj.Status.Phase == api.MachinePhaseSuccess {
-		// Now wait for the cluster to be created
-		fmt.Println("Machine Created Successfully")
-	} else {
-		return r.createMachine()
-	}
-	return nil
-}
-
 func (r *MachineReconciler) createMachine() error {
+	r.log.Info("Creating Machine", "Cloud", r.machineObj.Spec.Driver)
 	if cutil.IsConditionTrue(r.machineObj.Status.Conditions, api.MachineConditionMachineCreating) {
 		return nil
 	}
-	r.log.Info("Creating Google Compute Engine")
 	args, err := r.getMachineCreationArgs()
 	if err != nil {
 		return err
 	}
 	cutil.MarkTrue(r.machineObj, api.MachineConditionMachineCreating)
 	cmd := exec.Command("docker-machine", args...)
-	fmt.Println(args)
 	err = cmd.Run()
 	if err != nil {
 		fmt.Println(err.Error())
@@ -48,6 +37,14 @@ func (r *MachineReconciler) createMachine() error {
 	cutil.MarkTrue(r.machineObj, api.MachineConditionTypeMachineReady)
 	r.log.Info("Created Docker Machine Successfully")
 	return nil
+}
+
+func (r *MachineReconciler) createPrerequisitesForMachine() error {
+	var err error = nil
+	if r.machineObj.Spec.Driver.Name == AWSDriver {
+		err = r.createAmazonVPC()
+	}
+	return err
 }
 
 func (r *MachineReconciler) getMachineCreationArgs() ([]string, error) {

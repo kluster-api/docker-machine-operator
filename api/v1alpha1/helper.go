@@ -15,6 +15,8 @@ const (
 )
 
 const (
+	MachineConditionClusterCreatedSuccessfully = "ClusterCreatedSuccessfully"
+
 	MachineConditionAuthDataNotFound   = "AuthDataNotFound"
 	MachineConditionScriptDataNotFound = "ScriptDataNotFound"
 
