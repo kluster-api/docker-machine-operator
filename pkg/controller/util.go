@@ -17,6 +17,7 @@ limitations under the License.
 package controller
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -34,6 +35,23 @@ const (
 	AWSDriver    string = "amazonec2"
 	AzureDriver  string = "azure"
 )
+
+func (r *MachineReconciler) processFinalizer() (bool, error) {
+	if r.machineObj.DeletionTimestamp.IsZero() {
+		err := r.ensureFinalizer()
+		if err != nil {
+			return false, err
+		}
+	} else {
+		// Machine Object is Deleted
+		err := r.removeFinalizerAfterCleanup()
+		if err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+	return true, nil
+}
 
 func (r *MachineReconciler) ensureFinalizer() error {
 	finalizerName := api.GetFinalizer()
@@ -62,22 +80,6 @@ func (r *MachineReconciler) removeFinalizerAfterCleanup() error {
 	return nil
 }
 
-func (r *MachineReconciler) processFinalizer() error {
-	if r.machineObj.DeletionTimestamp.IsZero() {
-		err := r.ensureFinalizer()
-		if err != nil {
-			return err
-		}
-	} else {
-		// Machine Object is Deleted
-		err := r.removeFinalizerAfterCleanup()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (r *MachineReconciler) patchFinalizer(verbType kutil.VerbType, finalizerName string) error {
 	_, err := cu.CreateOrPatch(context.TODO(), r.Client, r.machineObj, func(object client.Object, createOp bool) client.Object {
 		if verbType == kutil.VerbCreated {
@@ -91,17 +93,27 @@ func (r *MachineReconciler) patchFinalizer(verbType kutil.VerbType, finalizerNam
 }
 
 func (r *MachineReconciler) cleanupMachineResources() error {
-	scriptFilePath := scriptFileDirectory + r.scriptFileName
+	scriptFilePath := tempDirectory + r.scriptFileName
 	err := os.Remove(scriptFilePath)
 	if err != nil && os.IsExist(err) {
 		return err
 	}
 
-	args := []string{"rm", r.machineObj.Name}
+	resultFilePath := tempDirectory + "result.txt"
+	err = os.Remove(resultFilePath)
+	if err != nil && os.IsExist(err) {
+		return err
+	}
+
+	args := []string{"rm", r.machineObj.Name, "-y"}
 	cmd := exec.Command("docker-machine", args...)
+	var commandOutput, commandError bytes.Buffer
+	cmd.Stdout = &commandOutput
+	cmd.Stderr = &commandError
+
 	err = cmd.Run()
 	if err != nil {
-		fmt.Println(err.Error())
+		r.log.Info("Error machine deletion", "Error: ", commandError.String(), "Output: ", commandOutput.String())
 		return client.IgnoreNotFound(err)
 	}
 	return nil

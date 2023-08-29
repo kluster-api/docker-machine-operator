@@ -29,27 +29,29 @@ const (
 	MachineConditionTypeMachineReady  kmapi.ConditionType = "MachineReady"
 	MachineConditionTypeScriptReady   kmapi.ConditionType = "ScriptReady"
 	MachineConditionTypeAuthDataReady kmapi.ConditionType = "AuthDataReady"
+	MachineConditionTypeClusterReady  kmapi.ConditionType = "ClusterReady"
 )
 
 const (
 	MachineConditionClusterCreatedSuccessfully = "ClusterCreatedSuccessfully"
-
-	MachineConditionAuthDataNotFound   = "AuthDataNotFound"
-	MachineConditionScriptDataNotFound = "ScriptDataNotFound"
-
-	MachineConditionMachineCreating = "MachineCreating"
+	MachineConditionWaitingForScriptCompletion = "WaitingForScriptCompletion"
+	MachineConditionAuthDataNotFound           = "AuthDataNotFound"
+	MachineConditionScriptDataNotFound         = "ScriptDataNotFound"
+	MachineConditionMachineCreating            = "MachineCreating"
 )
 
 const (
-	MachinePhasePending     MachinePhase = "Pending"
-	MachinePhaseInProgress  MachinePhase = "InProgress"
-	MachinePhaseSuccess     MachinePhase = "Success"
-	MachinePhaseTerminating MachinePhase = "Terminating"
-	MachinePhaseFailed      MachinePhase = "Failed"
+	MachinePhasePending                MachinePhase = "Pending"
+	MachinePhaseInProgress             MachinePhase = "InProgress"
+	MachinePhaseWaitingForClusterReady MachinePhase = "WaitingForClusterReady"
+	MachinePhaseSuccess                MachinePhase = "Success"
+	MachinePhaseTerminating            MachinePhase = "Terminating"
+	MachinePhaseFailed                 MachinePhase = "Failed"
 )
 
 func ConditionsOrder() []kmapi.ConditionType {
 	return []kmapi.ConditionType{
+		MachineConditionTypeClusterReady,
 		MachineConditionTypeMachineReady,
 		MachineConditionTypeAuthDataReady,
 		MachineConditionTypeScriptReady,
@@ -62,7 +64,7 @@ func GetPhase(obj *Machine) MachinePhase {
 	}
 	conditions := obj.GetConditions()
 	if len(conditions) == 0 {
-		return MachinePhasePending
+		return MachinePhaseInProgress
 	}
 	var cond kmapi.Condition
 	for i := range conditions {
@@ -86,6 +88,9 @@ func GetPhase(obj *Machine) MachinePhase {
 	}
 	if cond.Reason == MachineConditionMachineCreating {
 		return MachinePhaseInProgress
+	}
+	if cond.Reason == MachineConditionWaitingForScriptCompletion {
+		return MachinePhaseWaitingForClusterReady
 	}
 	return MachinePhaseSuccess
 }

@@ -17,27 +17,30 @@ limitations under the License.
 package controller
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/appscode/go/crypto/rand"
 	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
 	core "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	kmapi "kmodules.xyz/client-go/api/v1"
 	cutil "kmodules.xyz/client-go/conditions"
 )
 
-const scriptFileDirectory = "/tmp/"
+const tempDirectory = "/tmp/"
 
 func (r *MachineReconciler) createMachine() error {
-	r.log.Info("Creating Machine", "Cloud", r.machineObj.Spec.Driver)
-	if cutil.IsConditionTrue(r.machineObj.Status.Conditions, api.MachineConditionMachineCreating) {
+	if cutil.IsConditionTrue(r.machineObj.Status.Conditions, api.MachineConditionMachineCreating) ||
+		cutil.IsConditionTrue(r.machineObj.Status.Conditions, string(api.MachineConditionTypeMachineReady)) {
 		return nil
 	}
+
+	r.log.Info("Creating Machine", "Cloud", r.machineObj.Spec.Driver)
 	err := r.createPrerequisitesForMachine()
 	if err != nil {
 		return err
@@ -46,15 +49,22 @@ func (r *MachineReconciler) createMachine() error {
 	if err != nil {
 		return err
 	}
+
 	cutil.MarkTrue(r.machineObj, api.MachineConditionMachineCreating)
 	cmd := exec.Command("docker-machine", args...)
+	var commandOutput, commandError bytes.Buffer
+	cmd.Stdout = &commandOutput
+	cmd.Stderr = &commandError
+
 	err = cmd.Run()
-	if err != nil {
-		fmt.Println(err.Error())
+	if err != nil && !strings.Contains(commandError.String(), "already exists") {
+		r.log.Info("Error creating docker machine", "Error: ", commandError.String(), "Output: ", commandOutput.String())
 		cutil.MarkFalse(r.machineObj, api.MachineConditionTypeMachineReady, err.Error(), kmapi.ConditionSeverityError,
 			"Unable to create docker machine")
+
 		return err
 	}
+
 	cutil.MarkTrue(r.machineObj, api.MachineConditionTypeMachineReady)
 	r.log.Info("Created Docker Machine Successfully")
 	return nil
@@ -101,15 +111,14 @@ func (r *MachineReconciler) getMachineCreationArgs() ([]string, error) {
 func (r *MachineReconciler) getAuthSecretArgs() ([]string, error) {
 	authSecret, err := r.getSecret(r.machineObj.Spec.AuthSecret)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			cutil.MarkFalse(r.machineObj, api.MachineConditionTypeAuthDataReady, api.MachineConditionScriptDataNotFound, kmapi.ConditionSeverityError, "unable to read auth data")
-			return nil, nil
-		}
 		return nil, err
 	}
 	var authArgs []string
 	for key, value := range authSecret.Data {
-		data := base64.StdEncoding.EncodeToString(value)
+		data := string(value)
+		if r.machineObj.Spec.Driver.Name == GoogleDriver {
+			data = base64.StdEncoding.EncodeToString(value)
+		}
 		if len(data) == 0 || len(key) == 0 {
 			return nil, fmt.Errorf("auth secret not found")
 		}
@@ -123,10 +132,6 @@ func (r *MachineReconciler) getAuthSecretArgs() ([]string, error) {
 func (r *MachineReconciler) getStartupScriptArgs() ([]string, error) {
 	scriptSecret, err := r.getSecret(r.machineObj.Spec.ScriptRef)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			cutil.MarkFalse(r.machineObj, api.MachineConditionTypeScriptReady, api.MachineConditionScriptDataNotFound, kmapi.ConditionSeverityError, "unable to create script")
-			return nil, nil
-		}
 		return nil, err
 	}
 	var fileName string
@@ -136,7 +141,7 @@ func (r *MachineReconciler) getStartupScriptArgs() ([]string, error) {
 		fileName = fmt.Sprintf("%s.sh", rand.WithUniqSuffix("script"))
 	}
 
-	filePath := scriptFileDirectory + fileName
+	filePath := tempDirectory + fileName
 
 	var userDataKey, userDataValue string
 	for key, value := range scriptSecret.Data {

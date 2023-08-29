@@ -66,19 +66,15 @@ func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	r.machineObj = machine.DeepCopy()
 
-	if !r.machineObj.GetDeletionTimestamp().IsZero() {
-		// Deletion timestamp is set. Cleanup and delete
-		err := r.processFinalizer()
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
-	}
-
 	cutil.SetSummary(r.machineObj, cutil.WithConditions(api.ConditionsOrder()...))
 	r.machineObj.Status.Phase = api.GetPhase(r.machineObj)
 
+	if machine.Status.Phase == "" {
+		return ctrl.Result{}, commit(ctx, &machine, r.machineObj)
+	}
+
 	err := r.reconcileDockerMachine()
+
 	if err != nil {
 		cErr := commit(ctx, &machine, r.machineObj)
 		if cErr != nil {
@@ -91,11 +87,19 @@ func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 }
 
 func (r *MachineReconciler) reconcileDockerMachine() error {
-	if r.machineObj.Status.Phase == api.MachinePhaseSuccess {
-		return r.isScriptFinished()
-	} else {
-		return r.createMachine()
+	if goForward, err := r.processFinalizer(); !goForward {
+		return err
 	}
+	err := r.createMachine()
+	if err != nil {
+		return err
+	}
+	r.log.Info("Created Machine. Now waiting for Cluster Creation")
+	err = r.isScriptFinished()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

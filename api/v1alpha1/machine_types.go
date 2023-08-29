@@ -32,14 +32,21 @@ type MachineSpec struct {
 
 // MachineStatus defines the observed state of Machine
 type MachineStatus struct {
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	// +kubebuilder:validation:MaxItems=8
 	Conditions []kmapi.Condition `json:"conditions"`
-	Phase      MachinePhase      `json:"phase"`
+	// +optional
+	Phase MachinePhase `json:"phase"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-
 // Machine is the Schema for the machines API
+
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.phase"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type Machine struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
