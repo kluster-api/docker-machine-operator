@@ -62,21 +62,19 @@ func (r *MachineReconciler) isScriptFinished() error {
 				cutil.MarkTrue(r.machineObj, api.MachineConditionTypeClusterReady)
 				return nil
 			}
+		} else {
+			r.log.Info("Failed to create cluster", "Error: ", err.Error())
 		}
 	}
-	cutil.MarkFalse(r.machineObj, api.MachineConditionTypeClusterReady, err.Error(), kmapi.ConditionSeverityError, "failed to create cluster")
+	cutil.MarkFalse(r.machineObj, api.MachineConditionTypeClusterReady, api.MachineConditionClusterCreateFailed, kmapi.ConditionSeverityError, "failed to create cluster")
 
 	return fmt.Errorf("failed to create cluster")
 }
 
 func (r *MachineReconciler) getScpArgs() []string {
 	var args = []string{"scp"}
-	userName := "docker-user"
-	if v, found := r.machineObj.Spec.Parameters["google-username"]; found {
-		userName = v
-	}
 	machineName := r.machineObj.Name
-	args = append(args, fmt.Sprintf("%s@%s:/tmp/result.txt", userName, machineName))
+	args = append(args, fmt.Sprintf("%s@%s:/tmp/result.txt", defaultUserName, machineName))
 	args = append(args, "/tmp")
 
 	return args

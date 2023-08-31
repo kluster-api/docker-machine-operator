@@ -35,6 +35,8 @@ const (
 	AWSDriver    string = "amazonec2"
 	AzureDriver  string = "azure"
 )
+const tempDirectory = "/tmp/"
+const defaultUserName = "docker-user"
 
 func (r *MachineReconciler) processFinalizer() (bool, error) {
 	if r.machineObj.DeletionTimestamp.IsZero() {

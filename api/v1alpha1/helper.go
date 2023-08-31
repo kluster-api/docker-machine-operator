@@ -34,6 +34,7 @@ const (
 
 const (
 	MachineConditionClusterCreatedSuccessfully = "ClusterCreatedSuccessfully"
+	MachineConditionClusterCreateFailed        = "ClusterCreateFailed"
 	MachineConditionWaitingForScriptCompletion = "WaitingForScriptCompletion"
 	MachineConditionAuthDataNotFound           = "AuthDataNotFound"
 	MachineConditionScriptDataNotFound         = "ScriptDataNotFound"
@@ -44,6 +45,7 @@ const (
 	MachinePhasePending                MachinePhase = "Pending"
 	MachinePhaseInProgress             MachinePhase = "InProgress"
 	MachinePhaseWaitingForClusterReady MachinePhase = "WaitingForClusterReady"
+	MachinePhaseClusterCreateFailed    MachinePhase = "ClusterCreateFailed"
 	MachinePhaseSuccess                MachinePhase = "Success"
 	MachinePhaseTerminating            MachinePhase = "Terminating"
 	MachinePhaseFailed                 MachinePhase = "Failed"
@@ -92,7 +94,10 @@ func GetPhase(obj *Machine) MachinePhase {
 	if cond.Reason == MachineConditionWaitingForScriptCompletion {
 		return MachinePhaseWaitingForClusterReady
 	}
-	return MachinePhaseSuccess
+	if cond.Reason == MachineConditionClusterCreateFailed {
+		return MachineConditionClusterCreateFailed
+	}
+	return MachinePhaseFailed
 }
 
 func GetFinalizer() string {

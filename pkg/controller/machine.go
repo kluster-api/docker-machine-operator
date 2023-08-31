@@ -32,8 +32,6 @@ import (
 	cutil "kmodules.xyz/client-go/conditions"
 )
 
-const tempDirectory = "/tmp/"
-
 func (r *MachineReconciler) createMachine() error {
 	if cutil.IsConditionTrue(r.machineObj.Status.Conditions, api.MachineConditionMachineCreating) ||
 		cutil.IsConditionTrue(r.machineObj.Status.Conditions, string(api.MachineConditionTypeMachineReady)) {
@@ -104,8 +102,26 @@ func (r *MachineReconciler) getMachineCreationArgs() ([]string, error) {
 	}
 	cutil.MarkTrue(r.machineObj, api.MachineConditionTypeAuthDataReady)
 	args = append(args, authArgs...)
+
+	args = append(args, r.getMachineUserArg()...)
+
 	args = append(args, r.machineObj.Name)
 	return args, nil
+}
+
+func (r *MachineReconciler) getMachineUserArg() []string {
+	var userArgs []string
+	driverName := r.machineObj.Spec.Driver.Name
+	switch driverName {
+	case GoogleDriver:
+		userArgs = append(userArgs, "--google-username")
+	case AWSDriver:
+		userArgs = append(userArgs, "--amazonec2-ssh-user")
+	case AzureDriver:
+		userArgs = append(userArgs, "--azure-ssh-user")
+	}
+	userArgs = append(userArgs, defaultUserName)
+	return userArgs
 }
 
 func (r *MachineReconciler) getAuthSecretArgs() ([]string, error) {
