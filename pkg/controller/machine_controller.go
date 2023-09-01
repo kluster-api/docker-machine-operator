@@ -53,11 +53,7 @@ type MachineReconciler struct {
 func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.log = log.FromContext(ctx)
 
-	commit := committer.NewStatusCommitter[*api.Machine, *api.MachineSpec, *api.MachineStatus](
-		func(ns string) committer.Patcher[*api.Machine] {
-			return r.Client.Status()
-		},
-	)
+	commit := committer.NewStatusCommitter[*api.Machine, *api.MachineStatus](r.Client.Status())
 
 	var machine api.Machine
 	if err := r.Get(ctx, req.NamespacedName, &machine); err != nil {
