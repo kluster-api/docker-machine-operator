@@ -9,13 +9,13 @@ require (
 	github.com/onsi/gomega v1.27.4
 	github.com/spf13/cobra v1.6.0
 	go.bytebuilders.dev/license-verifier v0.13.3
-	gomodules.xyz/logs v0.0.6
+	gomodules.xyz/logs v0.0.7
 	gomodules.xyz/x v0.0.14
 	k8s.io/api v0.25.3
 	k8s.io/apimachinery v0.25.3
 	k8s.io/client-go v0.25.3
 	k8s.io/klog/v2 v2.90.1
-	kmodules.xyz/client-go v0.25.27
+	kmodules.xyz/client-go v0.25.30
 	sigs.k8s.io/controller-runtime v0.13.1
 )
 
@@ -87,7 +87,7 @@ require (
 	golang.org/x/tools v0.9.1 // indirect
 	gomodules.xyz/clock v0.0.0-20200817085942-06523dba733f // indirect
 	gomodules.xyz/flags v0.1.3 // indirect
-	gomodules.xyz/jsonpatch/v2 v2.3.0 // indirect
+	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	gomodules.xyz/password-generator v0.2.7 // indirect
 	gomodules.xyz/sets v0.2.1 // indirect
 	gomodules.xyz/wait v0.2.0 // indirect
