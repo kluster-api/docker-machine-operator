@@ -23,7 +23,7 @@ import (
 	//+kubebuilder:scaffold:imports
 
 	dockermachinev1alpha1 "go.klusters.dev/docker-machine-operator/api/v1alpha1"
-	"go.klusters.dev/docker-machine-operator/internal/controller"
+	"go.klusters.dev/docker-machine-operator/pkg/controller"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.

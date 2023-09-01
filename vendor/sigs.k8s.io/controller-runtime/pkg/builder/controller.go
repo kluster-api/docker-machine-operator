@@ -17,7 +17,6 @@ limitations under the License.
 package builder
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -30,7 +29,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	internalsource "sigs.k8s.io/controller-runtime/pkg/internal/source"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -97,20 +95,14 @@ func (blder *Builder) For(object client.Object, opts ...ForOption) *Builder {
 
 // OwnsInput represents the information set by Owns method.
 type OwnsInput struct {
-	matchEveryOwner  bool
 	object           client.Object
 	predicates       []predicate.Predicate
 	objectProjection objectProjection
 }
 
 // Owns defines types of Objects being *generated* by the ControllerManagedBy, and configures the ControllerManagedBy to respond to
-// create / delete / update events by *reconciling the owner object*.
-//
-// The default behavior reconciles only the first controller-type OwnerReference of the given type.
-// Use Owns(object, builder.MatchEveryOwner) to reconcile all owners.
-//
-// By default, this is the equivalent of calling
-// Watches(object, handler.EnqueueRequestForOwner([...], ownerType, OnlyControllerOwner())).
+// create / delete / update events by *reconciling the owner object*.  This is the equivalent of calling
+// Watches(&source.Kind{Type: <ForType-forInput>}, &handler.EnqueueRequestForOwner{OwnerType: apiType, IsController: true}).
 func (blder *Builder) Owns(object client.Object, opts ...OwnsOption) *Builder {
 	input := OwnsInput{object: object}
 	for _, opt := range opts {
@@ -129,54 +121,10 @@ type WatchesInput struct {
 	objectProjection objectProjection
 }
 
-// Watches defines the type of Object to watch, and configures the ControllerManagedBy to respond to create / delete /
-// update events by *reconciling the object* with the given EventHandler.
-//
-// This is the equivalent of calling
-// WatchesRawSource(source.Kind(scheme, object), eventhandler, opts...).
-func (blder *Builder) Watches(object client.Object, eventhandler handler.EventHandler, opts ...WatchesOption) *Builder {
-	src := source.Kind(blder.mgr.GetCache(), object)
-	return blder.WatchesRawSource(src, eventhandler, opts...)
-}
-
-// WatchesMetadata is the same as Watches, but forces the internal cache to only watch PartialObjectMetadata.
-//
-// This is useful when watching lots of objects, really big objects, or objects for which you only know
-// the GVK, but not the structure.  You'll need to pass metav1.PartialObjectMetadata to the client
-// when fetching objects in your reconciler, otherwise you'll end up with a duplicate structured or unstructured cache.
-//
-// When watching a resource with metadata only, for example the v1.Pod, you should not Get and List using the v1.Pod type.
-// Instead, you should use the special metav1.PartialObjectMetadata type.
-//
-// ❌ Incorrect:
-//
-//	pod := &v1.Pod{}
-//	mgr.GetClient().Get(ctx, nsAndName, pod)
-//
-// ✅ Correct:
-//
-//	pod := &metav1.PartialObjectMetadata{}
-//	pod.SetGroupVersionKind(schema.GroupVersionKind{
-//	    Group:   "",
-//	    Version: "v1",
-//	    Kind:    "Pod",
-//	})
-//	mgr.GetClient().Get(ctx, nsAndName, pod)
-//
-// In the first case, controller-runtime will create another cache for the
-// concrete type on top of the metadata cache; this increases memory
-// consumption and leads to race conditions as caches are not in sync.
-func (blder *Builder) WatchesMetadata(object client.Object, eventhandler handler.EventHandler, opts ...WatchesOption) *Builder {
-	opts = append(opts, OnlyMetadata)
-	return blder.Watches(object, eventhandler, opts...)
-}
-
-// WatchesRawSource exposes the lower-level ControllerManagedBy Watches functions through the builder.
+// Watches exposes the lower-level ControllerManagedBy Watches functions through the builder.  Consider using
+// Owns or For instead of Watches directly.
 // Specified predicates are registered only for given source.
-//
-// STOP! Consider using For(...), Owns(...), Watches(...), WatchesMetadata(...) instead.
-// This method is only exposed for more advanced use cases, most users should use higher level functions.
-func (blder *Builder) WatchesRawSource(src source.Source, eventhandler handler.EventHandler, opts ...WatchesOption) *Builder {
+func (blder *Builder) Watches(src source.Source, eventhandler handler.EventHandler, opts ...WatchesOption) *Builder {
 	input := WatchesInput{src: src, eventhandler: eventhandler}
 	for _, opt := range opts {
 		opt.ApplyToWatches(&input)
@@ -234,6 +182,10 @@ func (blder *Builder) Build(r reconcile.Reconciler) (controller.Controller, erro
 	if blder.forInput.err != nil {
 		return nil, blder.forInput.err
 	}
+	// Checking the reconcile type exist or not
+	if blder.forInput.object == nil {
+		return nil, fmt.Errorf("must provide an object for reconciliation")
+	}
 
 	// Set the ControllerManagedBy
 	if err := blder.doController(r); err != nil {
@@ -267,38 +219,28 @@ func (blder *Builder) project(obj client.Object, proj objectProjection) (client.
 
 func (blder *Builder) doWatch() error {
 	// Reconcile type
-	if blder.forInput.object != nil {
-		obj, err := blder.project(blder.forInput.object, blder.forInput.objectProjection)
-		if err != nil {
-			return err
-		}
-		src := source.Kind(blder.mgr.GetCache(), obj)
-		hdler := &handler.EnqueueRequestForObject{}
-		allPredicates := append(blder.globalPredicates, blder.forInput.predicates...)
-		if err := blder.ctrl.Watch(src, hdler, allPredicates...); err != nil {
-			return err
-		}
+	typeForSrc, err := blder.project(blder.forInput.object, blder.forInput.objectProjection)
+	if err != nil {
+		return err
+	}
+	src := &source.Kind{Type: typeForSrc}
+	hdler := &handler.EnqueueRequestForObject{}
+	allPredicates := append(blder.globalPredicates, blder.forInput.predicates...)
+	if err := blder.ctrl.Watch(src, hdler, allPredicates...); err != nil {
+		return err
 	}
 
 	// Watches the managed types
-	if len(blder.ownsInput) > 0 && blder.forInput.object == nil {
-		return errors.New("Owns() can only be used together with For()")
-	}
 	for _, own := range blder.ownsInput {
-		obj, err := blder.project(own.object, own.objectProjection)
+		typeForSrc, err := blder.project(own.object, own.objectProjection)
 		if err != nil {
 			return err
 		}
-		src := source.Kind(blder.mgr.GetCache(), obj)
-		opts := []handler.OwnerOption{}
-		if !own.matchEveryOwner {
-			opts = append(opts, handler.OnlyControllerOwner())
+		src := &source.Kind{Type: typeForSrc}
+		hdler := &handler.EnqueueRequestForOwner{
+			OwnerType:    blder.forInput.object,
+			IsController: true,
 		}
-		hdler := handler.EnqueueRequestForOwner(
-			blder.mgr.GetScheme(), blder.mgr.GetRESTMapper(),
-			blder.forInput.object,
-			opts...,
-		)
 		allPredicates := append([]predicate.Predicate(nil), blder.globalPredicates...)
 		allPredicates = append(allPredicates, own.predicates...)
 		if err := blder.ctrl.Watch(src, hdler, allPredicates...); err != nil {
@@ -307,15 +249,12 @@ func (blder *Builder) doWatch() error {
 	}
 
 	// Do the watch requests
-	if len(blder.watchesInput) == 0 && blder.forInput.object == nil {
-		return errors.New("there are no watches configured, controller will never get triggered. Use For(), Owns() or Watches() to set them up")
-	}
 	for _, w := range blder.watchesInput {
 		allPredicates := append([]predicate.Predicate(nil), blder.globalPredicates...)
 		allPredicates = append(allPredicates, w.predicates...)
 
-		// If the source of this watch is of type Kind, project it.
-		if srckind, ok := w.src.(*internalsource.Kind); ok {
+		// If the source of this watch is of type *source.Kind, project it.
+		if srckind, ok := w.src.(*source.Kind); ok {
 			typeForSrc, err := blder.project(srckind.Type, w.objectProjection)
 			if err != nil {
 				return err
@@ -330,14 +269,11 @@ func (blder *Builder) doWatch() error {
 	return nil
 }
 
-func (blder *Builder) getControllerName(gvk schema.GroupVersionKind, hasGVK bool) (string, error) {
+func (blder *Builder) getControllerName(gvk schema.GroupVersionKind) string {
 	if blder.name != "" {
-		return blder.name, nil
+		return blder.name
 	}
-	if !hasGVK {
-		return "", errors.New("one of For() or Named() must be called")
-	}
-	return strings.ToLower(gvk.Kind), nil
+	return strings.ToLower(gvk.Kind)
 }
 
 func (blder *Builder) doController(r reconcile.Reconciler) error {
@@ -350,18 +286,13 @@ func (blder *Builder) doController(r reconcile.Reconciler) error {
 
 	// Retrieve the GVK from the object we're reconciling
 	// to prepopulate logger information, and to optionally generate a default name.
-	var gvk schema.GroupVersionKind
-	hasGVK := blder.forInput.object != nil
-	if hasGVK {
-		var err error
-		gvk, err = getGvk(blder.forInput.object, blder.mgr.GetScheme())
-		if err != nil {
-			return err
-		}
+	gvk, err := getGvk(blder.forInput.object, blder.mgr.GetScheme())
+	if err != nil {
+		return err
 	}
 
 	// Setup concurrency.
-	if ctrlOptions.MaxConcurrentReconciles == 0 && hasGVK {
+	if ctrlOptions.MaxConcurrentReconciles == 0 {
 		groupKind := gvk.GroupKind().String()
 
 		if concurrency, ok := globalOpts.GroupKindConcurrency[groupKind]; ok && concurrency > 0 {
@@ -370,34 +301,25 @@ func (blder *Builder) doController(r reconcile.Reconciler) error {
 	}
 
 	// Setup cache sync timeout.
-	if ctrlOptions.CacheSyncTimeout == 0 && globalOpts.CacheSyncTimeout > 0 {
-		ctrlOptions.CacheSyncTimeout = globalOpts.CacheSyncTimeout
+	if ctrlOptions.CacheSyncTimeout == 0 && globalOpts.CacheSyncTimeout != nil {
+		ctrlOptions.CacheSyncTimeout = *globalOpts.CacheSyncTimeout
 	}
 
-	controllerName, err := blder.getControllerName(gvk, hasGVK)
-	if err != nil {
-		return err
-	}
+	controllerName := blder.getControllerName(gvk)
 
 	// Setup the logger.
 	if ctrlOptions.LogConstructor == nil {
 		log := blder.mgr.GetLogger().WithValues(
 			"controller", controllerName,
+			"controllerGroup", gvk.Group,
+			"controllerKind", gvk.Kind,
 		)
-		if hasGVK {
-			log = log.WithValues(
-				"controllerGroup", gvk.Group,
-				"controllerKind", gvk.Kind,
-			)
-		}
 
 		ctrlOptions.LogConstructor = func(req *reconcile.Request) logr.Logger {
 			log := log
 			if req != nil {
-				if hasGVK {
-					log = log.WithValues(gvk.Kind, klog.KRef(req.Namespace, req.Name))
-				}
 				log = log.WithValues(
+					gvk.Kind, klog.KRef(req.Namespace, req.Name),
 					"namespace", req.Namespace, "name", req.Name,
 				)
 			}

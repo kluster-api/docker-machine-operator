@@ -12,7 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM ghcr.io/appscode/dlv:1.20.1
+FROM alpine
+
+ARG TARGETARCH
+
+RUN set -x \
+    && apk add --no-cache ca-certificates \
+    && wget -O rancher-machine.tar.gz https://github.com/rancher/machine/releases/download/v0.15.0-rancher103/rancher-machine-${TARGETARCH}.tar.gz \
+    && tar xzf rancher-machine.tar.gz \
+    && chmod +x rancher-machine \
+    && mv rancher-machine docker-machine
+
+
+FROM ghcr.io/appscode/dlv:1.20.1 as build-env
 
 FROM {ARG_FROM}
 
@@ -21,12 +33,14 @@ LABEL org.opencontainers.image.source https://github.com/cluster-api/docker-mach
 RUN set -x \
   && apt-get update \
   && apt-get upgrade -y \
-  && apt-get install -y --no-install-recommends ca-certificates \
+  && apt-get install -y --no-install-recommends ca-certificates openssh-client \
   && rm -rf /var/lib/apt/lists/* /usr/share/doc /usr/share/man /tmp/* \
   && echo 'Etc/UTC' > /etc/timezone
 
 ADD bin/{ARG_BIN}-{ARG_OS}-{ARG_ARCH} /{ARG_BIN}
-COPY --from=0 /usr/local/bin/dlv /bin/dlv
+COPY --from=build-env /usr/local/bin/dlv /bin/dlv
+
+COPY --from=0 /docker-machine /bin/docker-machine
 
 EXPOSE 40000
 

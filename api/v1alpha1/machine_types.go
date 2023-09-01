@@ -17,31 +17,36 @@ limitations under the License.
 package v1alpha1
 
 import (
+	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	kmapi "kmodules.xyz/client-go/api/v1"
 )
-
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // MachineSpec defines the desired state of Machine
 type MachineSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of Machine. Edit machine_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	Driver     *core.LocalObjectReference `json:"driver"`
+	ScriptRef  *kmapi.ObjectReference     `json:"scriptRef"`
+	AuthSecret *kmapi.ObjectReference     `json:"authSecret"`
+	Parameters map[string]string          `json:"parameters"`
 }
 
 // MachineStatus defines the observed state of Machine
 type MachineStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	// +kubebuilder:validation:MaxItems=8
+	Conditions []kmapi.Condition `json:"conditions"`
+	// +optional
+	Phase MachinePhase `json:"phase"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-
 // Machine is the Schema for the machines API
+
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.phase"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type Machine struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -61,4 +66,16 @@ type MachineList struct {
 
 func init() {
 	SchemeBuilder.Register(&Machine{}, &MachineList{})
+}
+
+func (in *Machine) GetStatus() *MachineStatus {
+	return &in.Status
+}
+
+func (in *Machine) GetConditions() kmapi.Conditions {
+	return in.Status.Conditions
+}
+
+func (in *Machine) SetConditions(conditions kmapi.Conditions) {
+	in.Status.Conditions = conditions
 }

@@ -12,15 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+FROM alpine
+
+ARG TARGETARCH
+
+RUN set -x \
+    && apk add --no-cache ca-certificates \
+    && wget -O rancher-machine.tar.gz https://github.com/rancher/machine/releases/download/v0.15.0-rancher103/rancher-machine-${TARGETARCH}.tar.gz \
+    && tar xzf rancher-machine.tar.gz \
+    && chmod +x rancher-machine \
+    && mv rancher-machine docker-machine
+
 FROM {ARG_FROM}
 
 LABEL org.opencontainers.image.source https://github.com/cluster-api/docker-machine-operator
 
 RUN set -x \
-  && apk add --update --upgrade --no-cache pcre2 ca-certificates tzdata \
+  && apk add --update --upgrade --no-cache pcre2 ca-certificates tzdata openssh-client \
   && echo 'Etc/UTC' > /etc/timezone
 
 ADD bin/{ARG_BIN}-{ARG_OS}-{ARG_ARCH} /{ARG_BIN}
+
+COPY --from=0 /docker-machine /bin/docker-machine
 
 USER 65534
 

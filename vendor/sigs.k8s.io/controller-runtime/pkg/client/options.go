@@ -67,29 +67,6 @@ type DeleteAllOfOption interface {
 	ApplyToDeleteAllOf(*DeleteAllOfOptions)
 }
 
-// SubResourceGetOption modifies options for a SubResource Get request.
-type SubResourceGetOption interface {
-	ApplyToSubResourceGet(*SubResourceGetOptions)
-}
-
-// SubResourceUpdateOption is some configuration that modifies options for a update request.
-type SubResourceUpdateOption interface {
-	// ApplyToSubResourceUpdate applies this configuration to the given update options.
-	ApplyToSubResourceUpdate(*SubResourceUpdateOptions)
-}
-
-// SubResourceCreateOption is some configuration that modifies options for a create request.
-type SubResourceCreateOption interface {
-	// ApplyToSubResourceCreate applies this configuration to the given create options.
-	ApplyToSubResourceCreate(*SubResourceCreateOptions)
-}
-
-// SubResourcePatchOption configures a subresource patch request.
-type SubResourcePatchOption interface {
-	// ApplyToSubResourcePatch applies the configuration on the given patch options.
-	ApplyToSubResourcePatch(*SubResourcePatchOptions)
-}
-
 // }}}
 
 // {{{ Multi-Type Options
@@ -119,20 +96,7 @@ func (dryRunAll) ApplyToPatch(opts *PatchOptions) {
 func (dryRunAll) ApplyToDelete(opts *DeleteOptions) {
 	opts.DryRun = []string{metav1.DryRunAll}
 }
-
 func (dryRunAll) ApplyToDeleteAllOf(opts *DeleteAllOfOptions) {
-	opts.DryRun = []string{metav1.DryRunAll}
-}
-
-func (dryRunAll) ApplyToSubResourceCreate(opts *SubResourceCreateOptions) {
-	opts.DryRun = []string{metav1.DryRunAll}
-}
-
-func (dryRunAll) ApplyToSubResourceUpdate(opts *SubResourceUpdateOptions) {
-	opts.DryRun = []string{metav1.DryRunAll}
-}
-
-func (dryRunAll) ApplyToSubResourcePatch(opts *SubResourcePatchOptions) {
 	opts.DryRun = []string{metav1.DryRunAll}
 }
 
@@ -151,21 +115,6 @@ func (f FieldOwner) ApplyToCreate(opts *CreateOptions) {
 
 // ApplyToUpdate applies this configuration to the given update options.
 func (f FieldOwner) ApplyToUpdate(opts *UpdateOptions) {
-	opts.FieldManager = string(f)
-}
-
-// ApplyToSubResourcePatch applies this configuration to the given patch options.
-func (f FieldOwner) ApplyToSubResourcePatch(opts *SubResourcePatchOptions) {
-	opts.FieldManager = string(f)
-}
-
-// ApplyToSubResourceCreate applies this configuration to the given create options.
-func (f FieldOwner) ApplyToSubResourceCreate(opts *SubResourceCreateOptions) {
-	opts.FieldManager = string(f)
-}
-
-// ApplyToSubResourceUpdate applies this configuration to the given update options.
-func (f FieldOwner) ApplyToSubResourceUpdate(opts *SubResourceUpdateOptions) {
 	opts.FieldManager = string(f)
 }
 
@@ -419,7 +368,7 @@ type ListOptions struct {
 	LabelSelector labels.Selector
 	// FieldSelector filters results by a particular field.  In order
 	// to use this with cache-based implementations, restrict usage to
-	// a single field-value pair that's been added to the indexers.
+	// field-value pair exact matches that's been added to the indexers.
 	FieldSelector fields.Selector
 
 	// Namespace represents the namespace to list for, or empty for
@@ -436,12 +385,6 @@ type ListOptions struct {
 	// it does not recognize and will return a 410 error if the token can no longer be used because
 	// it has expired. This field is not supported if watch is true in the Raw ListOptions.
 	Continue string
-
-	// UnsafeDisableDeepCopy indicates not to deep copy objects during list objects.
-	// Be very careful with this, when enabled you must DeepCopy any object before mutating it,
-	// otherwise you will mutate the object in the cache.
-	// +optional
-	UnsafeDisableDeepCopy *bool
 
 	// Raw represents raw ListOptions, as passed to the API server.  Note
 	// that these may not be respected by all implementations of interface,
@@ -470,9 +413,6 @@ func (o *ListOptions) ApplyToList(lo *ListOptions) {
 	}
 	if o.Continue != "" {
 		lo.Continue = o.Continue
-	}
-	if o.UnsafeDisableDeepCopy != nil {
-		lo.UnsafeDisableDeepCopy = o.UnsafeDisableDeepCopy
 	}
 }
 
@@ -606,11 +546,6 @@ func (n InNamespace) ApplyToDeleteAllOf(opts *DeleteAllOfOptions) {
 	n.ApplyToList(&opts.ListOptions)
 }
 
-// AsSelector returns a selector that matches objects in the given namespace.
-func (n InNamespace) AsSelector() fields.Selector {
-	return fields.SelectorFromSet(fields.Set{"metadata.namespace": string(n)})
-}
-
 // Limit specifies the maximum number of results to return from the server.
 // Limit does not implement DeleteAllOfOption interface because the server
 // does not support setting it for deletecollection operations.
@@ -620,25 +555,6 @@ type Limit int64
 func (l Limit) ApplyToList(opts *ListOptions) {
 	opts.Limit = int64(l)
 }
-
-// UnsafeDisableDeepCopyOption indicates not to deep copy objects during list objects.
-// Be very careful with this, when enabled you must DeepCopy any object before mutating it,
-// otherwise you will mutate the object in the cache.
-type UnsafeDisableDeepCopyOption bool
-
-// ApplyToList applies this configuration to the given an List options.
-func (d UnsafeDisableDeepCopyOption) ApplyToList(opts *ListOptions) {
-	definitelyTrue := true
-	definitelyFalse := false
-	if d {
-		opts.UnsafeDisableDeepCopy = &definitelyTrue
-	} else {
-		opts.UnsafeDisableDeepCopy = &definitelyFalse
-	}
-}
-
-// UnsafeDisableDeepCopy indicates not to deep copy objects during list objects.
-const UnsafeDisableDeepCopy = UnsafeDisableDeepCopyOption(true)
 
 // Continue sets a continuation token to retrieve chunks of results when using limit.
 // Continue does not implement DeleteAllOfOption interface because the server
@@ -736,6 +652,9 @@ type PatchOptions struct {
 
 	// Raw represents raw PatchOptions, as passed to the API server.
 	Raw *metav1.PatchOptions
+
+	// SendEmptyPatch is going to send empty patch calls to the API server.
+	SendEmptyPatch bool
 }
 
 // ApplyOptions applies the given patch options on these options,
@@ -793,9 +712,14 @@ func (forceOwnership) ApplyToPatch(opts *PatchOptions) {
 	opts.Force = &definitelyTrue
 }
 
-func (forceOwnership) ApplyToSubResourcePatch(opts *SubResourcePatchOptions) {
-	definitelyTrue := true
-	opts.Force = &definitelyTrue
+// SendEmptyPatch sets the "sendEmptyPatch" option to true.
+var SendEmptyPatch = sendEmptyPatch{}
+
+type sendEmptyPatch struct{}
+
+// ApplyToPatch applies this configuration to the given patch options.
+func (sendEmptyPatch) ApplyToPatch(opts *PatchOptions) {
+	opts.SendEmptyPatch = true
 }
 
 // }}}
