@@ -71,7 +71,7 @@ func (r *MachineReconciler) createMachine() error {
 func (r *MachineReconciler) createPrerequisitesForMachine() error {
 	var err error = nil
 	if r.machineObj.Spec.Driver.Name == AWSDriver {
-		err = r.createAmazonVPC()
+		err = r.createAWSEnvironment()
 	}
 	return err
 }
@@ -102,6 +102,8 @@ func (r *MachineReconciler) getMachineCreationArgs() ([]string, error) {
 	}
 	cutil.MarkTrue(r.machineObj, api.MachineConditionTypeAuthDataReady)
 	args = append(args, authArgs...)
+
+	args = append(args, r.getAnnotationsArgs()...)
 
 	args = append(args, r.getMachineUserArg()...)
 
@@ -143,6 +145,17 @@ func (r *MachineReconciler) getAuthSecretArgs() ([]string, error) {
 	}
 
 	return authArgs, nil
+}
+
+func (r MachineReconciler) getAnnotationsArgs() []string {
+	var annotationArgs []string
+	if r.machineObj.Spec.Driver.Name == AWSDriver {
+		if r.machineObj.Annotations[awsVPCIDAnnotation] != "" {
+			annotationArgs = append(annotationArgs, "--amazonec2-vpc-id")
+			annotationArgs = append(annotationArgs, r.machineObj.Annotations[awsVPCIDAnnotation])
+		}
+	}
+	return annotationArgs
 }
 
 func (r *MachineReconciler) getStartupScriptArgs() ([]string, error) {
