@@ -49,6 +49,9 @@ func (r *MachineReconciler) createMachine() error {
 	}
 
 	cutil.MarkTrue(r.machineObj, api.MachineConditionMachineCreating)
+	fmt.Println("-----------------------------------------------------------------------------------------")
+	fmt.Println("docker-machine ", args)
+	fmt.Println("-----------------------------------------------------------------------------------------")
 	cmd := exec.Command("docker-machine", args...)
 	var commandOutput, commandError bytes.Buffer
 	cmd.Stdout = &commandOutput
@@ -114,15 +117,17 @@ func (r *MachineReconciler) getMachineCreationArgs() ([]string, error) {
 func (r *MachineReconciler) getMachineUserArg() []string {
 	var userArgs []string
 	driverName := r.machineObj.Spec.Driver.Name
+	username := defaultUserName
 	switch driverName {
 	case GoogleDriver:
 		userArgs = append(userArgs, "--google-username")
 	case AWSDriver:
 		userArgs = append(userArgs, "--amazonec2-ssh-user")
+		username = defaultAWSUserName
 	case AzureDriver:
 		userArgs = append(userArgs, "--azure-ssh-user")
 	}
-	userArgs = append(userArgs, defaultUserName)
+	userArgs = append(userArgs, username)
 	return userArgs
 }
 
@@ -153,6 +158,10 @@ func (r MachineReconciler) getAnnotationsArgs() []string {
 		if r.machineObj.Annotations[awsVPCIDAnnotation] != "" {
 			annotationArgs = append(annotationArgs, "--amazonec2-vpc-id")
 			annotationArgs = append(annotationArgs, r.machineObj.Annotations[awsVPCIDAnnotation])
+		}
+		if r.machineObj.Annotations[awsSubnetIDAnnotation] != "" {
+			annotationArgs = append(annotationArgs, "--amazonec2-subnet-id")
+			annotationArgs = append(annotationArgs, r.machineObj.Annotations[awsSubnetIDAnnotation])
 		}
 	}
 	return annotationArgs

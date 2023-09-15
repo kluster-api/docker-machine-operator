@@ -1,0 +1,7 @@
+apiVersion: docker-machine.klusters.dev/v1alpha1
+kind: Driver
+metadata:
+  name: amazonec2
+  namespace: demo
+spec:
+  builtin: true

@@ -19,6 +19,7 @@ package controller
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -37,6 +38,8 @@ const (
 	awsInternetGatewayIDAnnotation = "docker-machine-operator/aws-gateway"
 	awsVpcCIDR                     = "10.1.0.0/16"
 	allowAllIPs                    = "0.0.0.0/0"
+	defaultZone                    = "a" //same as rancher amazonec2 driver default zone
+	regionParameter                = "amazonec2-region"
 )
 
 type awsAuthCredential struct {
@@ -95,7 +98,7 @@ func (r *MachineReconciler) awsEC2Client() (*ec2.EC2, error) {
 	return ec2.New(sess), nil
 }
 
-func (r *MachineReconciler) createAwsRoute(c *ec2.EC2, vpcId, internetGatewayID string) error {
+func createAwsRoute(c *ec2.EC2, vpcId, internetGatewayID string) error {
 	out, err := c.DescribeRouteTables(&ec2.DescribeRouteTablesInput{})
 	if err != nil {
 		return err
@@ -122,6 +125,31 @@ func (r *MachineReconciler) createAwsRoute(c *ec2.EC2, vpcId, internetGatewayID 
 	klog.Infof("route table updated")
 	return nil
 }
+func deleteAwsRoute(c *ec2.EC2, vpcId string) error {
+	out, err := c.DescribeRouteTables(&ec2.DescribeRouteTablesInput{})
+	if err != nil {
+		return err
+	}
+	var routeTable *ec2.RouteTable
+	for _, rt := range out.RouteTables {
+		if *rt.VpcId == vpcId {
+			routeTable = rt
+		}
+	}
+	if routeTable == nil {
+		return fmt.Errorf("no route table found in vpc %s", vpcId)
+	}
+
+	_, err = c.DeleteRoute(&ec2.DeleteRouteInput{
+		DestinationCidrBlock: stringToP(allowAllIPs),
+		RouteTableId:         routeTable.RouteTableId,
+	})
+	if err != nil {
+		return err
+	}
+	klog.Infof("route deleted")
+	return nil
+}
 
 func attachInternetGatewayToVPC(c *ec2.EC2, internetGatewayId, vpcID string) error {
 	_, err := c.AttachInternetGateway(&ec2.AttachInternetGatewayInput{
@@ -130,6 +158,14 @@ func attachInternetGatewayToVPC(c *ec2.EC2, internetGatewayId, vpcID string) err
 	})
 	return err
 }
+func detachInternetGatewayToVPC(c *ec2.EC2, internetGatewayID, vpcID string) error {
+	_, err := c.DetachInternetGateway(&ec2.DetachInternetGatewayInput{
+		InternetGatewayId: &internetGatewayID,
+		VpcId:             &vpcID,
+	})
+	return err
+}
+
 func (r *MachineReconciler) createAwsInternetGateway(c *ec2.EC2, vpcId string) error {
 	out, err := c.CreateInternetGateway(&ec2.CreateInternetGatewayInput{})
 	if err != nil {
@@ -137,43 +173,60 @@ func (r *MachineReconciler) createAwsInternetGateway(c *ec2.EC2, vpcId string) e
 	}
 	err = attachInternetGatewayToVPC(c, *out.InternetGateway.InternetGatewayId, vpcId)
 	if err != nil {
-		er := r.deleteAwsInternetGateway(c, *out.InternetGateway.InternetGatewayId)
+		er := deleteAwsInternetGateway(c, *out.InternetGateway.InternetGatewayId, vpcId)
 		if er != nil {
 			err = errors.Join(err, er)
 		}
 		return err
 	}
 
-	err = r.createAwsRoute(c, vpcId, *out.InternetGateway.InternetGatewayId)
+	err = createAwsRoute(c, vpcId, *out.InternetGateway.InternetGatewayId)
 	if err != nil {
-		er := r.deleteAwsInternetGateway(c, *out.InternetGateway.InternetGatewayId)
+		er := deleteAwsInternetGateway(c, *out.InternetGateway.InternetGatewayId, vpcId)
 		if er != nil {
 			err = errors.Join(err, er)
 		}
+		return err
+	}
+
+	if err = r.patchAnnotation(awsInternetGatewayIDAnnotation, *out.InternetGateway.InternetGatewayId); err != nil {
 		return err
 	}
 
 	klog.Infof("internet gateway is created with id: %s", *out.InternetGateway.InternetGatewayId)
-	r.machineObj.Annotations[awsInternetGatewayIDAnnotation] = *out.InternetGateway.InternetGatewayId
 	return nil
 }
-func (r *MachineReconciler) deleteAwsInternetGateway(c *ec2.EC2, gatewayId string) error {
+func deleteAwsInternetGateway(c *ec2.EC2, gatewayId, vpcId string) error {
+	if err := deleteAwsRoute(c, vpcId); err != nil {
+		klog.Warningf("failed to delete route, ", err.Error())
+	}
+	if err := detachInternetGatewayToVPC(c, gatewayId, vpcId); err != nil {
+		klog.Warningf("failed to detach internet gateway to VPC, ", err.Error())
+	}
 	_, err := c.DeleteInternetGateway(&ec2.DeleteInternetGatewayInput{
 		DryRun:            nil,
 		InternetGatewayId: &gatewayId,
 	})
 	if err != nil {
+		if strings.Contains(err.Error(), "does not exist") {
+			klog.Warningf(err.Error())
+			return nil
+		}
 		return err
 	}
-	r.machineObj.Annotations[awsInternetGatewayIDAnnotation] = ""
+
 	klog.Infof("internet gateway successfully deleted")
 	return nil
 }
 
 func (r *MachineReconciler) createAwsSubnet(c *ec2.EC2, vpcID string) error {
+	if r.machineObj.Spec.Parameters[regionParameter] == "" {
+		return errors.New("region not specified")
+	}
 	out, err := c.CreateSubnet(&ec2.CreateSubnetInput{
-		CidrBlock: stringToP(awsVpcCIDR),
-		VpcId:     &vpcID,
+		CidrBlock:        stringToP(awsVpcCIDR),
+		VpcId:            &vpcID,
+		AvailabilityZone: stringToP(fmt.Sprintf("%s%s", r.machineObj.Spec.Parameters[regionParameter], defaultZone)),
 	})
 	if err != nil {
 		return err
@@ -188,22 +241,30 @@ func (r *MachineReconciler) createAwsSubnet(c *ec2.EC2, vpcID string) error {
 		return err
 	}
 
-	r.machineObj.Annotations[awsSubnetIDAnnotation] = *out.Subnet.SubnetId
+	if err = r.patchAnnotation(awsSubnetIDAnnotation, *out.Subnet.SubnetId); err != nil {
+		return err
+	}
+
 	klog.Infof("aws subnet created with subnet id: %s", *out.Subnet.SubnetId)
 	return nil
 }
 func (r *MachineReconciler) deleteAwsSubnet(c *ec2.EC2, subnetId string) error {
 	if r.machineObj.Annotations[awsInternetGatewayIDAnnotation] != "" {
-		_ = r.deleteAwsInternetGateway(c, r.machineObj.Annotations[awsInternetGatewayIDAnnotation])
+		if err := deleteAwsInternetGateway(c, r.machineObj.Annotations[awsInternetGatewayIDAnnotation], r.machineObj.Annotations[awsVPCIDAnnotation]); err != nil {
+			klog.Warningf("failed to delete internet gateway, ", err.Error())
+		}
 	}
 	_, err := c.DeleteSubnet(&ec2.DeleteSubnetInput{
 		SubnetId: &subnetId,
 	})
 	if err != nil {
+		if strings.Contains(err.Error(), "does not exist") {
+			klog.Warningf(err.Error())
+			return nil
+		}
 		return err
 	}
 
-	r.machineObj.Annotations[awsSubnetIDAnnotation] = ""
 	klog.Infof("subnet successfully deleted")
 	return nil
 }
@@ -224,58 +285,110 @@ func getVPC(c *ec2.EC2, vpcId *string) (*ec2.Vpc, error) {
 	return nil, fmt.Errorf("no vpc found with id %s", *vpcId)
 }
 func (r *MachineReconciler) createAwsVpc(c *ec2.EC2) error {
-	out, err := c.CreateVpc(&ec2.CreateVpcInput{
-		CidrBlock: stringToP(awsVpcCIDR),
-	})
-	if err != nil {
-		return err
-	}
+	var vpc *ec2.Vpc
+	var err error
 
-	err = waitForState(5*time.Second, 1*time.Minute, func() (bool, error) {
-		vpc, err := getVPC(c, out.Vpc.VpcId)
+	if r.machineObj.Annotations[awsVPCIDAnnotation] == "" {
+		out, err := c.CreateVpc(&ec2.CreateVpcInput{
+			CidrBlock: stringToP(awsVpcCIDR),
+		})
 		if err != nil {
-			return false, err
+			return err
+		}
+		vpc = out.Vpc
+		if err = r.patchAnnotation(awsVPCIDAnnotation, *vpc.VpcId); err != nil {
+			return err
 		}
 
-		if *vpc.State == "available" {
-			return true, nil
+		err = waitForState(5*time.Second, 1*time.Minute, func() (bool, error) {
+			vpc, err := getVPC(c, vpc.VpcId)
+			if err != nil {
+				return false, err
+			}
+
+			if *vpc.State == "available" {
+				return true, nil
+			}
+			return false, nil
+		})
+		if err != nil {
+			er := r.deleteAwsVpc(c, *vpc.VpcId)
+			if er != nil {
+				err = errors.Join(err, er)
+			}
+			return err
 		}
-		return false, nil
-	})
-	if err != nil {
-		er := r.deleteAwsVpc(c, *out.Vpc.VpcId)
-		if er != nil {
-			err = errors.Join(err, er)
+	} else {
+		vpc, err = getVPC(c, stringToP(r.machineObj.Annotations[awsVPCIDAnnotation]))
+		if err != nil {
+			return err
 		}
-		return err
 	}
 
-	err = r.createAwsSubnet(c, *out.Vpc.VpcId)
-	if err != nil {
-		er := r.deleteAwsVpc(c, *out.Vpc.VpcId)
-		if er != nil {
-			err = errors.Join(err, er)
+	if r.machineObj.Annotations[awsSubnetIDAnnotation] == "" {
+		if err = r.createAwsSubnet(c, *vpc.VpcId); err != nil {
+			er := r.deleteAwsVpc(c, *vpc.VpcId)
+			if er != nil {
+				err = errors.Join(err, er)
+			}
+			return err
 		}
-		return err
 	}
 
-	r.machineObj.Annotations[awsVPCIDAnnotation] = *out.Vpc.VpcId
-	klog.Infof("aws vpc created with id %s", *out.Vpc.VpcId)
+	klog.Infof("aws vpc created with id %s", *vpc.VpcId)
 	return nil
 }
 func (r *MachineReconciler) deleteAwsVpc(c *ec2.EC2, vpcID string) error {
+	if r.machineObj.Annotations[awsVPCIDAnnotation] == "" {
+		return nil
+	}
+
 	if r.machineObj.Annotations[awsSubnetIDAnnotation] != "" {
 		_ = r.deleteAwsSubnet(c, r.machineObj.Annotations[awsSubnetIDAnnotation])
 	}
+
+	if err := deleteSecurityGroup(c, vpcID); err != nil {
+		return err
+	}
+
 	_, err := c.DeleteVpc(&ec2.DeleteVpcInput{
 		VpcId: stringToP(vpcID),
 	})
 	if err != nil {
+		if strings.Contains(err.Error(), "does not exist") {
+			klog.Warningf(err.Error())
+			return nil
+		}
 		return err
 	}
 
-	r.machineObj.Annotations[awsVPCIDAnnotation] = ""
 	klog.Infof("vpc successfully delete")
+	return nil
+}
+
+func deleteSecurityGroup(c *ec2.EC2, vpcId string) error {
+	vpcKey := "vpc-id"
+	filters := []*ec2.Filter{
+		{
+			Name:   &vpcKey,
+			Values: stringPSlice([]string{vpcId}),
+		},
+	}
+	des, err := c.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
+		Filters: filters,
+	})
+	if err != nil {
+		return err
+	}
+	for _, sg := range des.SecurityGroups {
+		_, err = c.DeleteSecurityGroup(&ec2.DeleteSecurityGroupInput{
+			GroupId: sg.GroupId,
+		})
+		if err != nil {
+			klog.Warningf(fmt.Sprintf("failed to delete security group: %s", *sg.GroupId))
+		}
+		klog.Infof("%s deleted", *sg.GroupId)
+	}
 	return nil
 }
 

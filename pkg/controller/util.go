@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"time"
 
 	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
 	kutil "kmodules.xyz/client-go"
@@ -37,6 +38,7 @@ const (
 )
 const tempDirectory = "/tmp/"
 const defaultUserName = "docker-user"
+const defaultAWSUserName = "ubuntu"
 
 func (r *MachineReconciler) processFinalizer() (bool, error) {
 	if r.machineObj.DeletionTimestamp.IsZero() {
@@ -118,5 +120,55 @@ func (r *MachineReconciler) cleanupMachineResources() error {
 		r.log.Info("Error machine deletion", "Error: ", commandError.String(), "Output: ", commandOutput.String())
 		return client.IgnoreNotFound(err)
 	}
+
+	if r.machineObj.Spec.Driver.Name == AWSDriver {
+		c, err := r.awsEC2Client()
+		if err != nil {
+			return err
+		}
+
+		if err = r.deleteAwsVpc(c, r.machineObj.Annotations[awsVPCIDAnnotation]); err != nil {
+			return err
+		}
+	}
+
 	return nil
+}
+
+func (r *MachineReconciler) patchAnnotation(key, value string) error {
+	_, err := cu.CreateOrPatch(context.TODO(), r.Client, r.machineObj, func(object client.Object, createOp bool) client.Object {
+		anno := object.GetAnnotations()
+		anno[key] = value
+		object.SetAnnotations(anno)
+		return object
+	})
+	return err
+}
+
+func stringToP(st string) *string {
+	return &st
+}
+
+func stringPSlice(sl []string) []*string {
+	var ret []*string
+	for i := 0; i < len(sl); i++ {
+		ret = append(ret, &sl[i])
+	}
+	return ret
+}
+
+func waitForState(retry, timeout time.Duration, getStatus func() (bool, error)) error {
+	for t := time.Second * 0; t <= timeout; t += retry {
+		fmt.Println("getting state")
+		res, err := getStatus()
+		if err != nil {
+			return err
+		}
+		if res {
+			return nil
+		}
+		fmt.Println("retrying")
+		time.Sleep(retry)
+	}
+	return fmt.Errorf("failed to get desired status")
 }
