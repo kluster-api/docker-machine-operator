@@ -52,19 +52,14 @@ func (r *MachineReconciler) getAWSCredentials() (*awsAuthCredential, error) {
 		return nil, err
 	}
 
-	var awsCreds awsAuthCredential
-	for key, value := range authSecret.Data {
-		data := string(value)
-		if len(data) == 0 || len(key) == 0 {
-			return nil, fmt.Errorf("auth secret not found")
-		}
-		if key == awsAccessKeyField {
-			awsCreds.accessKey = data
-		}
-		if key == awsSecretKeyField {
-			awsCreds.secretKey = data
-		}
+	if len(authSecret.Data[awsAccessKeyField]) == 0 || len(authSecret.Data[awsSecretKeyField]) == 0 {
+		return nil, fmt.Errorf("auth secret not found")
 	}
+	awsCreds := awsAuthCredential{
+		accessKey: string(authSecret.Data[awsSecretKeyField]),
+		secretKey: string(authSecret.Data[awsAccessKeyField]),
+	}
+
 	awsCreds.region = r.machineObj.Spec.Parameters[awsRegionField]
 	if awsCreds.secretKey == "" || awsCreds.accessKey == "" || awsCreds.region == "" {
 		return nil, errors.New("failed to get aws credentials or region")
@@ -83,11 +78,11 @@ func (r *MachineReconciler) newAWSClientSession() (*session.Session, error) {
 		Credentials: credentials.NewStaticCredentials(cred.accessKey, cred.secretKey, ""),
 	}
 
-	sess, err := session.NewSession(awsCfg)
+	session, err := session.NewSession(awsCfg)
 	if err != nil {
 		return nil, err
 	}
-	return sess, nil
+	return session, nil
 }
 
 func (r *MachineReconciler) awsEC2Client() (*ec2.EC2, error) {

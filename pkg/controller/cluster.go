@@ -83,5 +83,3 @@ func (r *MachineReconciler) getScpArgs() []string {
 
 	return args
 }
-
-// docker-machine scp ubuntu@rancher-vm:/tmp/result.txt /tmp

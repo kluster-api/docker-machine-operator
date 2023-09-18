@@ -49,9 +49,7 @@ func (r *MachineReconciler) createMachine() error {
 	}
 
 	cutil.MarkTrue(r.machineObj, api.MachineConditionMachineCreating)
-	fmt.Println("-----------------------------------------------------------------------------------------")
-	fmt.Println("docker-machine ", args)
-	fmt.Println("-----------------------------------------------------------------------------------------")
+
 	cmd := exec.Command("docker-machine", args...)
 	var commandOutput, commandError bytes.Buffer
 	cmd.Stdout = &commandOutput
