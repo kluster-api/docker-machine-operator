@@ -78,7 +78,7 @@ func (r *MachineReconciler) getScpArgs() []string {
 		username = defaultAWSUserName
 	}
 	machineName := r.machineObj.Name
-	args = append(args, fmt.Sprintf("%s@%s:/tmp/result.txt", username, machineName))
+	args = append(args, fmt.Sprintf("%s@%s:/root/result.txt", username, machineName))
 	args = append(args, "/tmp")
 
 	return args

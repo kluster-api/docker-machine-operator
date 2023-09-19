@@ -56,8 +56,8 @@ func (r *MachineReconciler) getAWSCredentials() (*awsAuthCredential, error) {
 		return nil, fmt.Errorf("auth secret not found")
 	}
 	awsCreds := awsAuthCredential{
-		accessKey: string(authSecret.Data[awsSecretKeyField]),
-		secretKey: string(authSecret.Data[awsAccessKeyField]),
+		accessKey: string(authSecret.Data[awsAccessKeyField]),
+		secretKey: string(authSecret.Data[awsSecretKeyField]),
 	}
 
 	awsCreds.region = r.machineObj.Spec.Parameters[awsRegionField]
