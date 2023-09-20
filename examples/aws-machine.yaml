@@ -1,0 +1,17 @@
+apiVersion: docker-machine.klusters.dev/v1alpha1
+kind: Machine
+metadata:
+  name: rancher-vm
+  namespace: demo
+spec:
+  driver:
+    name: amazonec2
+  authSecret:
+    name: aws-cred
+    namespace: demo
+  scriptRef:
+    name: aws
+    namespace: demo
+  parameters:
+    "amazonec2-region": "us-east-1"
+    "amazonec2-instance-type": "t2.xlarge"

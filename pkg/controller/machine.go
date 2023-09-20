@@ -49,6 +49,7 @@ func (r *MachineReconciler) createMachine() error {
 	}
 
 	cutil.MarkTrue(r.machineObj, api.MachineConditionMachineCreating)
+
 	cmd := exec.Command("docker-machine", args...)
 	var commandOutput, commandError bytes.Buffer
 	cmd.Stdout = &commandOutput
@@ -71,7 +72,7 @@ func (r *MachineReconciler) createMachine() error {
 func (r *MachineReconciler) createPrerequisitesForMachine() error {
 	var err error = nil
 	if r.machineObj.Spec.Driver.Name == AWSDriver {
-		err = r.createAmazonVPC()
+		err = r.createAWSEnvironment()
 	}
 	return err
 }
@@ -103,6 +104,8 @@ func (r *MachineReconciler) getMachineCreationArgs() ([]string, error) {
 	cutil.MarkTrue(r.machineObj, api.MachineConditionTypeAuthDataReady)
 	args = append(args, authArgs...)
 
+	args = append(args, r.getAnnotationsArgs()...)
+
 	args = append(args, r.getMachineUserArg()...)
 
 	args = append(args, r.machineObj.Name)
@@ -112,15 +115,17 @@ func (r *MachineReconciler) getMachineCreationArgs() ([]string, error) {
 func (r *MachineReconciler) getMachineUserArg() []string {
 	var userArgs []string
 	driverName := r.machineObj.Spec.Driver.Name
+	username := defaultUserName
 	switch driverName {
 	case GoogleDriver:
 		userArgs = append(userArgs, "--google-username")
 	case AWSDriver:
 		userArgs = append(userArgs, "--amazonec2-ssh-user")
+		username = defaultAWSUserName
 	case AzureDriver:
 		userArgs = append(userArgs, "--azure-ssh-user")
 	}
-	userArgs = append(userArgs, defaultUserName)
+	userArgs = append(userArgs, username)
 	return userArgs
 }
 
@@ -143,6 +148,21 @@ func (r *MachineReconciler) getAuthSecretArgs() ([]string, error) {
 	}
 
 	return authArgs, nil
+}
+
+func (r MachineReconciler) getAnnotationsArgs() []string {
+	var annotationArgs []string
+	if r.machineObj.Spec.Driver.Name == AWSDriver {
+		if r.machineObj.Annotations[awsVPCIDAnnotation] != "" {
+			annotationArgs = append(annotationArgs, "--amazonec2-vpc-id")
+			annotationArgs = append(annotationArgs, r.machineObj.Annotations[awsVPCIDAnnotation])
+		}
+		if r.machineObj.Annotations[awsSubnetIDAnnotation] != "" {
+			annotationArgs = append(annotationArgs, "--amazonec2-subnet-id")
+			annotationArgs = append(annotationArgs, r.machineObj.Annotations[awsSubnetIDAnnotation])
+		}
+	}
+	return annotationArgs
 }
 
 func (r *MachineReconciler) getStartupScriptArgs() ([]string, error) {

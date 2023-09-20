@@ -73,8 +73,12 @@ func (r *MachineReconciler) isScriptFinished() error {
 
 func (r *MachineReconciler) getScpArgs() []string {
 	var args = []string{"scp"}
+	username := defaultUserName
+	if r.machineObj.Spec.Driver.Name == AWSDriver {
+		username = defaultAWSUserName
+	}
 	machineName := r.machineObj.Name
-	args = append(args, fmt.Sprintf("%s@%s:/tmp/result.txt", defaultUserName, machineName))
+	args = append(args, fmt.Sprintf("%s@%s:/root/result.txt", username, machineName))
 	args = append(args, "/tmp")
 
 	return args
