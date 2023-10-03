@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-logr/logr"
 	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
@@ -32,10 +33,9 @@ import (
 // MachineReconciler reconciles a Machine object
 type MachineReconciler struct {
 	client.Client
-	log            logr.Logger
-	machineObj     *api.Machine
-	Scheme         *runtime.Scheme
-	scriptFileName string
+	log        logr.Logger
+	machineObj *api.Machine
+	Scheme     *runtime.Scheme
 }
 
 //+kubebuilder:rbac:groups=docker-machine.klusters.dev,resources=machines,verbs=get;list;watch;create;update;patch;delete
@@ -69,33 +69,38 @@ func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, commit(ctx, &machine, r.machineObj)
 	}
 
-	err := r.reconcileDockerMachine()
+	rekey, err := r.reconcileDockerMachine()
+
+	reconcileResult := ctrl.Result{}
+	if rekey {
+		reconcileResult.RequeueAfter = time.Minute * 1
+	}
 
 	if err != nil {
 		cErr := commit(ctx, &machine, r.machineObj)
 		if cErr != nil {
-			return ctrl.Result{}, cErr
+			return reconcileResult, cErr
 		}
-		return ctrl.Result{}, err
+		return reconcileResult, err
 	}
 
-	return ctrl.Result{}, commit(ctx, &machine, r.machineObj)
+	return reconcileResult, commit(ctx, &machine, r.machineObj)
 }
 
-func (r *MachineReconciler) reconcileDockerMachine() error {
+func (r *MachineReconciler) reconcileDockerMachine() (bool, error) {
 	if goForward, err := r.processFinalizer(); !goForward {
-		return err
+		return false, err
 	}
 	err := r.createMachine()
 	if err != nil {
-		return err
+		return false, err
 	}
 	r.log.Info("Created Machine. Now waiting for Cluster Creation")
-	err = r.isScriptFinished()
+	rekey, err := r.isScriptFinished()
 	if err != nil {
-		return err
+		return rekey, err
 	}
-	return nil
+	return rekey, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

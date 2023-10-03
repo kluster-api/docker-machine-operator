@@ -25,7 +25,6 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/appscode/go/crypto/rand"
 	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
 	core "k8s.io/api/core/v1"
 	kmapi "kmodules.xyz/client-go/api/v1"
@@ -38,7 +37,6 @@ func (r *MachineReconciler) createMachine() error {
 		return nil
 	}
 
-	r.log.Info("Creating Machine", "Cloud", r.machineObj.Spec.Driver)
 	err := r.createPrerequisitesForMachine()
 	if err != nil {
 		return err
@@ -47,9 +45,9 @@ func (r *MachineReconciler) createMachine() error {
 	if err != nil {
 		return err
 	}
+	r.log.Info("Creating Machine", "Cloud", r.machineObj.Spec.Driver)
 
 	cutil.MarkTrue(r.machineObj, api.MachineConditionMachineCreating)
-
 	cmd := exec.Command("docker-machine", args...)
 	var commandOutput, commandError bytes.Buffer
 	cmd.Stdout = &commandOutput
@@ -86,14 +84,16 @@ func (r *MachineReconciler) getMachineCreationArgs() ([]string, error) {
 		args = append(args, v)
 	}
 
-	scriptArgs, err := r.getStartupScriptArgs()
-	if err != nil {
-		r.log.Error(err, "unable to create script")
-		cutil.MarkFalse(r.machineObj, api.MachineConditionTypeScriptReady, err.Error(), kmapi.ConditionSeverityError, "unable to create script")
-		return nil, err
+	if r.machineObj.Spec.ScriptRef != nil {
+		scriptArgs, err := r.getStartupScriptArgs()
+		if err != nil {
+			r.log.Error(err, "unable to create script")
+			cutil.MarkFalse(r.machineObj, api.MachineConditionTypeScriptReady, err.Error(), kmapi.ConditionSeverityError, "unable to create script")
+			return nil, err
+		}
+		cutil.MarkTrue(r.machineObj, api.MachineConditionTypeScriptReady)
+		args = append(args, scriptArgs...)
 	}
-	cutil.MarkTrue(r.machineObj, api.MachineConditionTypeScriptReady)
-	args = append(args, scriptArgs...)
 
 	authArgs, err := r.getAuthSecretArgs()
 	if err != nil {
@@ -106,27 +106,8 @@ func (r *MachineReconciler) getMachineCreationArgs() ([]string, error) {
 
 	args = append(args, r.getAnnotationsArgs()...)
 
-	args = append(args, r.getMachineUserArg()...)
-
 	args = append(args, r.machineObj.Name)
 	return args, nil
-}
-
-func (r *MachineReconciler) getMachineUserArg() []string {
-	var userArgs []string
-	driverName := r.machineObj.Spec.Driver.Name
-	username := defaultUserName
-	switch driverName {
-	case GoogleDriver:
-		userArgs = append(userArgs, "--google-username")
-	case AWSDriver:
-		userArgs = append(userArgs, "--amazonec2-ssh-user")
-		username = defaultAWSUserName
-	case AzureDriver:
-		userArgs = append(userArgs, "--azure-ssh-user")
-	}
-	userArgs = append(userArgs, username)
-	return userArgs
 }
 
 func (r *MachineReconciler) getAuthSecretArgs() ([]string, error) {
@@ -146,7 +127,6 @@ func (r *MachineReconciler) getAuthSecretArgs() ([]string, error) {
 		authArgs = append(authArgs, fmt.Sprintf("--%s", key))
 		authArgs = append(authArgs, data)
 	}
-
 	return authArgs, nil
 }
 
@@ -170,14 +150,7 @@ func (r *MachineReconciler) getStartupScriptArgs() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	var fileName string
-	if r.scriptFileName != "" {
-		fileName = r.scriptFileName
-	} else {
-		fileName = fmt.Sprintf("%s.sh", rand.WithUniqSuffix("script"))
-	}
-
-	filePath := tempDirectory + fileName
+	var filePath = r.getScriptFilePath()
 
 	var userDataKey, userDataValue string
 	for key, value := range scriptSecret.Data {
@@ -190,6 +163,7 @@ func (r *MachineReconciler) getStartupScriptArgs() ([]string, error) {
 	if len(userDataKey) == 0 || len(userDataValue) == 0 {
 		return nil, fmt.Errorf("script data not found")
 	}
+
 	scriptArgs := []string{fmt.Sprintf("--%s", userDataKey)}
 	scriptArgs = append(scriptArgs, filePath)
 
@@ -200,12 +174,12 @@ func (r *MachineReconciler) getStartupScriptArgs() ([]string, error) {
 	if !os.IsNotExist(err) {
 		return nil, err
 	}
+	r.log.Info("writing start up script in file", "Filepath", filePath)
 
 	err = os.WriteFile(filePath, []byte(userDataValue), 0644)
 	if err != nil {
 		return nil, err
 	}
-	r.scriptFileName = fileName
 	return scriptArgs, nil
 }
 

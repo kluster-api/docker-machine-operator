@@ -24,10 +24,12 @@ import (
 
 // MachineSpec defines the desired state of Machine
 type MachineSpec struct {
-	Driver     *core.LocalObjectReference `json:"driver"`
-	ScriptRef  *kmapi.ObjectReference     `json:"scriptRef"`
-	AuthSecret *kmapi.ObjectReference     `json:"authSecret"`
-	Parameters map[string]string          `json:"parameters"`
+	Driver *core.LocalObjectReference `json:"driver"`
+	// +optional
+	ScriptRef  *kmapi.ObjectReference `json:"scriptRef"`
+	AuthSecret *kmapi.ObjectReference `json:"authSecret"`
+	// +optional
+	Parameters map[string]string `json:"parameters"`
 }
 
 // MachineStatus defines the observed state of Machine

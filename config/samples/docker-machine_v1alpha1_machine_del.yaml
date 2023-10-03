@@ -1,7 +1,7 @@
 apiVersion: docker-machine.klusters.dev/v1alpha1
 kind: Machine
 metadata:
-  name: rancher-vm
+  name: rancher-vm-del
   namespace: demo
 spec:
   driver:
@@ -10,7 +10,7 @@ spec:
     name: gcp-cred
     namespace: demo
   scriptRef:
-    name: gcpscriptcreate
+    name: gcpscriptdel
     namespace: demo
   parameters:
     "google-project": "appscode-testing"

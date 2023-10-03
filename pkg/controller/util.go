@@ -36,9 +36,12 @@ const (
 	AWSDriver    string = "amazonec2"
 	AzureDriver  string = "azure"
 )
-const tempDirectory = "/tmp/"
-const defaultUserName = "docker-user"
-const defaultAWSUserName = "ubuntu"
+
+const (
+	defaultUserName    = "docker-user"
+	defaultAWSUserName = "ubuntu"
+	tempDirectory      = "tmp"
+)
 
 func (r *MachineReconciler) processFinalizer() (bool, error) {
 	if r.machineObj.DeletionTimestamp.IsZero() {
@@ -97,8 +100,7 @@ func (r *MachineReconciler) patchFinalizer(verbType kutil.VerbType, finalizerNam
 }
 
 func (r *MachineReconciler) cleanupMachineResources() error {
-	scriptFilePath := tempDirectory + r.scriptFileName
-	err := os.Remove(scriptFilePath)
+	err := os.Remove(r.getScriptFilePath())
 	if err != nil && os.IsExist(err) {
 		return err
 	}
@@ -171,4 +173,7 @@ func waitForState(retry, timeout time.Duration, getStatus func() (bool, error)) 
 		time.Sleep(retry)
 	}
 	return fmt.Errorf("failed to get desired status")
+}
+func (r *MachineReconciler) getScriptFilePath() string {
+	return fmt.Sprintf("/%s/%s-%s-startup.sh", tempDirectory, r.machineObj.Namespace, r.machineObj.Name)
 }

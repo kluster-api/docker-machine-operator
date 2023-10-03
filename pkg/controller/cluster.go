@@ -29,9 +29,14 @@ import (
 	cutil "kmodules.xyz/client-go/conditions"
 )
 
-func (r *MachineReconciler) isScriptFinished() error {
+const resultFile = "/tmp/result.txt"
+
+func (r *MachineReconciler) isScriptFinished() (bool, error) {
 	if !cutil.IsConditionTrue(r.machineObj.Status.Conditions, string(api.MachineConditionTypeMachineReady)) {
-		return nil
+		return false, nil
+	}
+	if cutil.IsConditionTrue(r.machineObj.Status.Conditions, string(api.MachinePhaseSuccess)) || cutil.IsConditionTrue(r.machineObj.Status.Conditions, string(api.MachinePhaseFailed)) {
+		return false, nil
 	}
 
 	args := r.getScpArgs()
@@ -42,15 +47,16 @@ func (r *MachineReconciler) isScriptFinished() error {
 
 	err := cmd.Run()
 	if err != nil {
+		fmt.Println("Rekeying Again")
 		r.log.Info("Error checking script completion", "Error: ", commandError.String(), "Output: ", commandOutput.String())
-		cutil.MarkFalse(r.machineObj, api.MachineConditionTypeClusterReady, api.MachineConditionWaitingForScriptCompletion, kmapi.ConditionSeverityError, "failed to check script completion")
-		return err
+		cutil.MarkFalse(r.machineObj, api.MachineConditionTypeScriptComplete, api.MachineConditionWaitingForScriptCompletion, kmapi.ConditionSeverityError, "failed to check script completion")
+		return true, err
 	}
 	r.log.Info("Finished Cluster Creation Script.")
 
-	file, err := os.Open("/tmp/result.txt")
+	file, err := os.Open(resultFile)
 	if err != nil {
-		return err
+		return false, err
 	}
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -58,28 +64,47 @@ func (r *MachineReconciler) isScriptFinished() error {
 		ret, err := strconv.Atoi(resStr)
 		if err == nil {
 			r.log.Info("Script return code: " + strconv.Itoa(ret))
+			var createError error = nil
 			if ret == 0 {
-				cutil.MarkTrue(r.machineObj, api.MachineConditionTypeClusterReady)
-				return nil
+				cutil.MarkTrue(r.machineObj, api.MachineConditionTypeScriptComplete)
+			} else {
+				cutil.MarkFalse(r.machineObj, api.MachineConditionTypeScriptComplete, api.MachineConditionClusterOperationFailed, kmapi.ConditionSeverityError, "failed to create cluster")
+				createError = fmt.Errorf("failed to create cluster")
 			}
+			err := os.Remove(resultFile)
+			if err != nil {
+				return false, err
+			}
+			return false, createError
+
 		} else {
 			r.log.Info("Failed to create cluster", "Error: ", err.Error())
+
 		}
 	}
-	cutil.MarkFalse(r.machineObj, api.MachineConditionTypeClusterReady, api.MachineConditionClusterCreateFailed, kmapi.ConditionSeverityError, "failed to create cluster")
-
-	return fmt.Errorf("failed to create cluster")
+	return false, fmt.Errorf("failed to create cluster")
 }
 
 func (r *MachineReconciler) getScpArgs() []string {
 	var args = []string{"scp"}
-	username := defaultUserName
-	if r.machineObj.Spec.Driver.Name == AWSDriver {
-		username = defaultAWSUserName
-	}
 	machineName := r.machineObj.Name
-	args = append(args, fmt.Sprintf("%s@%s:/root/result.txt", username, machineName))
+
+	args = append(args, fmt.Sprintf("%s@%s:/tmp/result.txt", r.getDefaultUser(), machineName))
 	args = append(args, "/tmp")
 
 	return args
+}
+
+func (r *MachineReconciler) getDefaultUser() string {
+	var defaultUser string
+	driverName := r.machineObj.Spec.Driver.Name
+	switch driverName {
+	case GoogleDriver:
+		defaultUser = "docker-user"
+	case AWSDriver:
+		defaultUser = "ubuntu"
+	case AzureDriver:
+		defaultUser = "docker-user"
+	}
+	return defaultUser
 }

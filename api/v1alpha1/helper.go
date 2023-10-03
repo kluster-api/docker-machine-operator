@@ -26,15 +26,15 @@ import (
 type MachinePhase string
 
 const (
-	MachineConditionTypeMachineReady  kmapi.ConditionType = "MachineReady"
-	MachineConditionTypeScriptReady   kmapi.ConditionType = "ScriptReady"
-	MachineConditionTypeAuthDataReady kmapi.ConditionType = "AuthDataReady"
-	MachineConditionTypeClusterReady  kmapi.ConditionType = "ClusterReady"
+	MachineConditionTypeMachineReady   kmapi.ConditionType = "MachineReady"
+	MachineConditionTypeScriptReady    kmapi.ConditionType = "ScriptReady"
+	MachineConditionTypeAuthDataReady  kmapi.ConditionType = "AuthDataReady"
+	MachineConditionTypeScriptComplete kmapi.ConditionType = "ScriptComplete"
 )
 
 const (
-	MachineConditionClusterCreatedSuccessfully = "ClusterCreatedSuccessfully"
-	MachineConditionClusterCreateFailed        = "ClusterCreateFailed"
+	MachineConditionClusterOperationSuccessful = "ClusterOperationSuccessful"
+	MachineConditionClusterOperationFailed     = "ClusterOperationFailed"
 	MachineConditionWaitingForScriptCompletion = "WaitingForScriptCompletion"
 	MachineConditionAuthDataNotFound           = "AuthDataNotFound"
 	MachineConditionScriptDataNotFound         = "ScriptDataNotFound"
@@ -42,18 +42,18 @@ const (
 )
 
 const (
-	MachinePhasePending                MachinePhase = "Pending"
-	MachinePhaseInProgress             MachinePhase = "InProgress"
-	MachinePhaseWaitingForClusterReady MachinePhase = "WaitingForClusterReady"
-	MachinePhaseClusterCreateFailed    MachinePhase = "ClusterCreateFailed"
-	MachinePhaseSuccess                MachinePhase = "Success"
-	MachinePhaseTerminating            MachinePhase = "Terminating"
-	MachinePhaseFailed                 MachinePhase = "Failed"
+	MachinePhasePending                    MachinePhase = "Pending"
+	MachinePhaseInProgress                 MachinePhase = "InProgress"
+	MachinePhaseWaitingForScriptCompletion MachinePhase = "WaitingForScriptCompletion"
+	MachinePhaseClusterOperationFailed     MachinePhase = "ClusterOperationFailed"
+	MachinePhaseSuccess                    MachinePhase = "Success"
+	MachinePhaseTerminating                MachinePhase = "Terminating"
+	MachinePhaseFailed                     MachinePhase = "Failed"
 )
 
 func ConditionsOrder() []kmapi.ConditionType {
 	return []kmapi.ConditionType{
-		MachineConditionTypeClusterReady,
+		MachineConditionTypeScriptComplete,
 		MachineConditionTypeMachineReady,
 		MachineConditionTypeAuthDataReady,
 		MachineConditionTypeScriptReady,
@@ -92,10 +92,10 @@ func GetPhase(obj *Machine) MachinePhase {
 		return MachinePhaseInProgress
 	}
 	if cond.Reason == MachineConditionWaitingForScriptCompletion {
-		return MachinePhaseWaitingForClusterReady
+		return MachinePhaseWaitingForScriptCompletion
 	}
-	if cond.Reason == MachineConditionClusterCreateFailed {
-		return MachineConditionClusterCreateFailed
+	if cond.Reason == MachineConditionClusterOperationFailed {
+		return MachineConditionClusterOperationFailed
 	}
 	return MachinePhaseFailed
 }
