@@ -25,6 +25,7 @@ import (
 	"time"
 
 	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	kutil "kmodules.xyz/client-go"
 	cu "kmodules.xyz/client-go/client"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -78,7 +79,9 @@ func (r *MachineReconciler) removeFinalizerAfterCleanup() error {
 		if err := r.cleanupMachineResources(); err != nil {
 			return err
 		}
-
+		if err := r.cleanupSecret(); err != nil {
+			return err
+		}
 		if err := r.patchFinalizer(kutil.VerbDeleted, finalizerName); err != nil {
 			return err
 		}
@@ -97,6 +100,26 @@ func (r *MachineReconciler) patchFinalizer(verbType kutil.VerbType, finalizerNam
 		return object
 	})
 	return err
+}
+
+func (r *MachineReconciler) cleanupSecret() error {
+	scriptSecret, err := r.getSecret(r.machineObj.Spec.ScriptRef)
+	if err != nil {
+		return err
+	}
+	err = r.Delete(context.TODO(), &scriptSecret)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	authSecret, err := r.getSecret(r.machineObj.Spec.AuthSecret)
+	if err != nil {
+		return err
+	}
+	err = r.Delete(context.TODO(), &authSecret)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	return nil
 }
 
 func (r *MachineReconciler) cleanupMachineResources() error {
@@ -140,6 +163,9 @@ func (r *MachineReconciler) cleanupMachineResources() error {
 func (r *MachineReconciler) patchAnnotation(key, value string) error {
 	_, err := cu.CreateOrPatch(context.TODO(), r.Client, r.machineObj, func(object client.Object, createOp bool) client.Object {
 		anno := object.GetAnnotations()
+		if anno == nil {
+			anno = make(map[string]string)
+		}
 		anno[key] = value
 		object.SetAnnotations(anno)
 		return object
