@@ -88,7 +88,7 @@ func (r *MachineReconciler) getMachineCreationArgs() ([]string, error) {
 		scriptArgs, err := r.getStartupScriptArgs()
 		if err != nil {
 			r.log.Error(err, "unable to create script")
-			cutil.MarkFalse(r.machineObj, api.MachineConditionTypeScriptReady, err.Error(), kmapi.ConditionSeverityError, "unable to create script")
+			cutil.MarkFalse(r.machineObj, api.MachineConditionTypeScriptReady, api.MachineConditionScriptDataNotFound, kmapi.ConditionSeverityError, "unable to create script")
 			return nil, err
 		}
 		cutil.MarkTrue(r.machineObj, api.MachineConditionTypeScriptReady)
@@ -98,7 +98,7 @@ func (r *MachineReconciler) getMachineCreationArgs() ([]string, error) {
 	authArgs, err := r.getAuthSecretArgs()
 	if err != nil {
 		r.log.Error(err, "unable to read auth data")
-		cutil.MarkFalse(r.machineObj, api.MachineConditionTypeAuthDataReady, err.Error(), kmapi.ConditionSeverityError, "unable to read auth data")
+		cutil.MarkFalse(r.machineObj, api.MachineConditionTypeAuthDataReady, api.MachineConditionAuthDataNotFound, kmapi.ConditionSeverityError, "unable to read auth data")
 		return nil, err
 	}
 	cutil.MarkTrue(r.machineObj, api.MachineConditionTypeAuthDataReady)

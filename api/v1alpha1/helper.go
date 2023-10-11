@@ -86,7 +86,7 @@ func GetPhase(obj *Machine) MachinePhase {
 
 	if cond.Reason == MachineConditionAuthDataNotFound ||
 		cond.Reason == MachineConditionScriptDataNotFound {
-		return MachinePhaseFailed
+		return MachinePhaseInProgress
 	}
 	if cond.Reason == MachineConditionMachineCreating {
 		return MachinePhaseInProgress
