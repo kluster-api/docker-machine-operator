@@ -77,7 +77,8 @@ func GetPhase(obj *Machine) MachinePhase {
 		}
 	}
 	if cond.Type != kmapi.ReadyCondition {
-		panic(fmt.Sprintf("no Ready condition in the status for %s/%s", obj.GetNamespace(), obj.GetName()))
+		fmt.Printf("no Ready condition in the status for %s/%s", obj.GetNamespace(), obj.GetName())
+		return MachinePhasePending
 	}
 
 	if cond.Status == metav1.ConditionTrue {
