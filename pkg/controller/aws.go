@@ -17,6 +17,7 @@ limitations under the License.
 package controller
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -46,8 +47,8 @@ type awsAuthCredential struct {
 	accessKey, secretKey, region string
 }
 
-func (r *MachineReconciler) getAWSCredentials() (*awsAuthCredential, error) {
-	authSecret, err := r.getSecret(r.machineObj.Spec.AuthSecret)
+func (r *MachineReconciler) getAWSCredentials(ctx context.Context) (*awsAuthCredential, error) {
+	authSecret, err := r.getSecret(ctx, r.machineObj.Spec.AuthSecret)
 	if err != nil {
 		return nil, err
 	}
@@ -67,8 +68,8 @@ func (r *MachineReconciler) getAWSCredentials() (*awsAuthCredential, error) {
 	return &awsCreds, nil
 }
 
-func (r *MachineReconciler) newAWSClientSession() (*session.Session, error) {
-	cred, err := r.getAWSCredentials()
+func (r *MachineReconciler) newAWSClientSession(ctx context.Context) (*session.Session, error) {
+	cred, err := r.getAWSCredentials(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -85,8 +86,8 @@ func (r *MachineReconciler) newAWSClientSession() (*session.Session, error) {
 	return session, nil
 }
 
-func (r *MachineReconciler) awsEC2Client() (*ec2.EC2, error) {
-	sess, err := r.newAWSClientSession()
+func (r *MachineReconciler) awsEC2Client(ctx context.Context) (*ec2.EC2, error) {
+	sess, err := r.newAWSClientSession(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -387,12 +388,12 @@ func deleteSecurityGroup(c *ec2.EC2, vpcId string) error {
 	return nil
 }
 
-func (r *MachineReconciler) createAWSEnvironment() error {
+func (r *MachineReconciler) createAWSEnvironment(ctx context.Context) error {
 	if r.machineObj.Annotations[awsVPCIDAnnotation] != "" && r.machineObj.Annotations[awsSubnetIDAnnotation] != "" && r.machineObj.Annotations[awsInternetGatewayIDAnnotation] != "" {
 		return nil
 	}
 
-	c, err := r.awsEC2Client()
+	c, err := r.awsEC2Client(ctx)
 	if err != nil {
 		return err
 	}

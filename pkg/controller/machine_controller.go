@@ -69,7 +69,7 @@ func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, commit(ctx, &machine, r.machineObj)
 	}
 
-	rekey, err := r.reconcileDockerMachine()
+	rekey, err := r.reconcileDockerMachine(ctx)
 
 	reconcileResult := ctrl.Result{}
 	if rekey {
@@ -87,11 +87,11 @@ func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	return reconcileResult, commit(ctx, &machine, r.machineObj)
 }
 
-func (r *MachineReconciler) reconcileDockerMachine() (bool, error) {
-	if goForward, err := r.processFinalizer(); !goForward {
+func (r *MachineReconciler) reconcileDockerMachine(ctx context.Context) (bool, error) {
+	if goForward, err := r.processFinalizer(ctx); !goForward {
 		return false, err
 	}
-	err := r.createMachine()
+	err := r.createMachine(ctx)
 	if err != nil {
 		return false, err
 	}

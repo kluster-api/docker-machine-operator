@@ -43,7 +43,7 @@ const (
 	tempDirectory      = "tmp"
 )
 
-func (r *MachineReconciler) processFinalizer() (bool, error) {
+func (r *MachineReconciler) processFinalizer(ctx context.Context) (bool, error) {
 	if r.machineObj.DeletionTimestamp.IsZero() {
 		err := r.ensureFinalizer()
 		if err != nil {
@@ -51,7 +51,7 @@ func (r *MachineReconciler) processFinalizer() (bool, error) {
 		}
 	} else {
 		// Machine Object is Deleted
-		err := r.removeFinalizerAfterCleanup()
+		err := r.removeFinalizerAfterCleanup(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -72,10 +72,10 @@ func (r *MachineReconciler) ensureFinalizer() error {
 	return nil
 }
 
-func (r *MachineReconciler) removeFinalizerAfterCleanup() error {
+func (r *MachineReconciler) removeFinalizerAfterCleanup(ctx context.Context) error {
 	finalizerName := api.GetFinalizer()
 	if controllerutil.ContainsFinalizer(r.machineObj, finalizerName) {
-		if err := r.cleanupMachineResources(); err != nil {
+		if err := r.cleanupMachineResources(ctx); err != nil {
 			return err
 		}
 		if err := r.patchFinalizer(kutil.VerbDeleted, finalizerName); err != nil {
@@ -98,7 +98,7 @@ func (r *MachineReconciler) patchFinalizer(verbType kutil.VerbType, finalizerNam
 	return err
 }
 
-func (r *MachineReconciler) cleanupMachineResources() error {
+func (r *MachineReconciler) cleanupMachineResources(ctx context.Context) error {
 	err := os.Remove(r.getScriptFilePath())
 	if err != nil && os.IsExist(err) {
 		return err
@@ -123,13 +123,18 @@ func (r *MachineReconciler) cleanupMachineResources() error {
 	}
 
 	if r.machineObj.Spec.Driver.Name == AWSDriver {
-		c, err := r.awsEC2Client()
+		c, err := r.awsEC2Client(ctx)
 		if err != nil {
 			return err
 		}
 
 		if err = r.deleteAwsVpc(c, r.machineObj.Annotations[awsVPCIDAnnotation]); err != nil {
 			return err
+		}
+	} else if r.machineObj.Spec.Driver.Name == AzureDriver {
+		err := r.deleteAzureResourceGroup(ctx)
+		if err != nil {
+			return nil
 		}
 	}
 
