@@ -47,10 +47,9 @@ func (r *MachineReconciler) isScriptFinished() (bool, error) {
 
 	err := cmd.Run()
 	if err != nil {
-		fmt.Println("Rekeying Again")
-		r.log.Info("Error checking script completion", "Error: ", commandError.String(), "Output: ", commandOutput.String())
+		r.log.Info("Error checking script completion. ReKeying. ", "CommandError: ", commandError.String(), "Output: ", commandOutput.String(), "Error: ", err.Error())
 		cutil.MarkFalse(r.machineObj, api.MachineConditionTypeScriptComplete, api.MachineConditionWaitingForScriptCompletion, kmapi.ConditionSeverityError, "failed to check script completion")
-		return true, err
+		return true, nil
 	}
 	r.log.Info("Finished Cluster Creation Script.")
 

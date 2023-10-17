@@ -78,7 +78,6 @@ func (r *MachineReconciler) removeFinalizerAfterCleanup() error {
 		if err := r.cleanupMachineResources(); err != nil {
 			return err
 		}
-
 		if err := r.patchFinalizer(kutil.VerbDeleted, finalizerName); err != nil {
 			return err
 		}
@@ -140,6 +139,9 @@ func (r *MachineReconciler) cleanupMachineResources() error {
 func (r *MachineReconciler) patchAnnotation(key, value string) error {
 	_, err := cu.CreateOrPatch(context.TODO(), r.Client, r.machineObj, func(object client.Object, createOp bool) client.Object {
 		anno := object.GetAnnotations()
+		if anno == nil {
+			anno = make(map[string]string)
+		}
 		anno[key] = value
 		object.SetAnnotations(anno)
 		return object
