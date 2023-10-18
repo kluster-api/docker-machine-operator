@@ -47,11 +47,11 @@ func (r *MachineReconciler) isScriptFinished() (bool, error) {
 
 	err := cmd.Run()
 	if err != nil {
-		r.log.Info("Error checking script completion. ReKeying. ", "CommandError: ", commandError.String(), "Output: ", commandOutput.String(), "Error: ", err.Error())
+		r.log.Info("Waiting for Script Completion. Checking Again in 1 minute. ", "CommandError: ", commandError.String(), "Output: ", commandOutput.String(), "Error: ", err.Error())
 		cutil.MarkFalse(r.machineObj, api.MachineConditionTypeScriptComplete, api.MachineConditionWaitingForScriptCompletion, kmapi.ConditionSeverityError, "failed to check script completion")
 		return true, nil
 	}
-	r.log.Info("Finished Cluster Creation Script.")
+	r.log.Info("Finished Cluster Operation Script.")
 
 	file, err := os.Open(resultFile)
 	if err != nil {
@@ -62,11 +62,12 @@ func (r *MachineReconciler) isScriptFinished() (bool, error) {
 		resStr := scanner.Text()
 		ret, err := strconv.Atoi(resStr)
 		if err == nil {
-			r.log.Info("Script return code: " + strconv.Itoa(ret))
 			var createError error = nil
 			if ret == 0 {
+				r.log.Info("Cluster Operation Finished Successfully")
 				cutil.MarkTrue(r.machineObj, api.MachineConditionTypeScriptComplete)
 			} else {
+				r.log.Info("Cluster Operation Failed")
 				cutil.MarkFalse(r.machineObj, api.MachineConditionTypeScriptComplete, api.MachineConditionClusterOperationFailed, kmapi.ConditionSeverityError, "failed to create cluster")
 				createError = fmt.Errorf("failed to create cluster")
 			}
@@ -77,8 +78,7 @@ func (r *MachineReconciler) isScriptFinished() (bool, error) {
 			return false, createError
 
 		} else {
-			r.log.Info("Failed to create cluster", "Error: ", err.Error())
-
+			r.log.Info("Failed to Check Script Completion", "Error: ", err.Error())
 		}
 	}
 	return false, fmt.Errorf("failed to create cluster")

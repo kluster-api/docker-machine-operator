@@ -51,11 +51,7 @@ func (r *MachineReconciler) processFinalizer(ctx context.Context) (bool, error) 
 		}
 	} else {
 		// Machine Object is Deleted
-		err := r.removeFinalizerAfterCleanup(ctx)
-		if err != nil {
-			return false, err
-		}
-		return false, nil
+		return false, r.removeFinalizerAfterCleanup(ctx)
 	}
 	return true, nil
 }
@@ -99,6 +95,31 @@ func (r *MachineReconciler) patchFinalizer(verbType kutil.VerbType, finalizerNam
 }
 
 func (r *MachineReconciler) cleanupMachineResources(ctx context.Context) error {
+	var err error
+	err = r.deleteFiles()
+	if err != nil {
+		return err
+	}
+	err = r.deleteDockerMachine()
+	if err != nil {
+		return err
+	}
+	if r.machineObj.Spec.Driver.Name == AWSDriver {
+		err = r.cleanupAWSResources(ctx)
+		if err != nil {
+			return err
+		}
+
+	} else if r.machineObj.Spec.Driver.Name == AzureDriver {
+		err = r.deleteAzureResourceGroup(ctx)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *MachineReconciler) deleteFiles() error {
 	err := os.Remove(r.getScriptFilePath())
 	if err != nil && os.IsExist(err) {
 		return err
@@ -109,35 +130,21 @@ func (r *MachineReconciler) cleanupMachineResources(ctx context.Context) error {
 	if err != nil && os.IsExist(err) {
 		return err
 	}
+	return nil
+}
 
+func (r *MachineReconciler) deleteDockerMachine() error {
 	args := []string{"rm", r.machineObj.Name, "-y"}
 	cmd := exec.Command("docker-machine", args...)
 	var commandOutput, commandError bytes.Buffer
 	cmd.Stdout = &commandOutput
 	cmd.Stderr = &commandError
 
-	err = cmd.Run()
+	err := cmd.Run()
 	if err != nil {
 		r.log.Info("Error machine deletion", "Error: ", commandError.String(), "Output: ", commandOutput.String())
 		return client.IgnoreNotFound(err)
 	}
-
-	if r.machineObj.Spec.Driver.Name == AWSDriver {
-		c, err := r.awsEC2Client(ctx)
-		if err != nil {
-			return err
-		}
-
-		if err = r.deleteAwsVpc(c, r.machineObj.Annotations[awsVPCIDAnnotation]); err != nil {
-			return err
-		}
-	} else if r.machineObj.Spec.Driver.Name == AzureDriver {
-		err := r.deleteAzureResourceGroup(ctx)
-		if err != nil {
-			return nil
-		}
-	}
-
 	return nil
 }
 

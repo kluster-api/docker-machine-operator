@@ -47,6 +47,29 @@ type awsAuthCredential struct {
 	accessKey, secretKey, region string
 }
 
+func (r *MachineReconciler) getAnnotationsArgsForAWS() []string {
+	var annotationArgs []string
+	if r.machineObj.Spec.Driver.Name == AWSDriver {
+		if r.machineObj.Annotations[awsVPCIDAnnotation] != "" {
+			annotationArgs = append(annotationArgs, "--amazonec2-vpc-id")
+			annotationArgs = append(annotationArgs, r.machineObj.Annotations[awsVPCIDAnnotation])
+		}
+		if r.machineObj.Annotations[awsSubnetIDAnnotation] != "" {
+			annotationArgs = append(annotationArgs, "--amazonec2-subnet-id")
+			annotationArgs = append(annotationArgs, r.machineObj.Annotations[awsSubnetIDAnnotation])
+		}
+	}
+	return annotationArgs
+}
+
+func (r *MachineReconciler) cleanupAWSResources(ctx context.Context) error {
+	c, err := r.awsEC2Client(ctx)
+	if err != nil {
+		return err
+	}
+	return r.deleteAwsVpc(c, r.machineObj.Annotations[awsVPCIDAnnotation])
+}
+
 func (r *MachineReconciler) getAWSCredentials(ctx context.Context) (*awsAuthCredential, error) {
 	authSecret, err := r.getSecret(ctx, r.machineObj.Spec.AuthSecret)
 	if err != nil {
@@ -211,7 +234,6 @@ func deleteAwsInternetGateway(c *ec2.EC2, gatewayId, vpcId string) error {
 		return err
 	}
 
-	klog.Infof("internet gateway successfully deleted")
 	return nil
 }
 
@@ -241,7 +263,7 @@ func (r *MachineReconciler) createAwsSubnet(c *ec2.EC2, vpcID string) error {
 		return err
 	}
 
-	klog.Infof("aws subnet created with subnet id: %s", *out.Subnet.SubnetId)
+	r.log.Info("aws subnet created", "subnet id ", *out.Subnet.SubnetId)
 	return nil
 }
 func (r *MachineReconciler) deleteAwsSubnet(c *ec2.EC2, subnetId string) error {
@@ -261,7 +283,7 @@ func (r *MachineReconciler) deleteAwsSubnet(c *ec2.EC2, subnetId string) error {
 		return err
 	}
 
-	klog.Infof("subnet successfully deleted")
+	r.log.Info("subnet successfully deleted")
 	return nil
 }
 
