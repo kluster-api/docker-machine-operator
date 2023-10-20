@@ -27,25 +27,26 @@ import (
 
 	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
 	core "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	kmapi "kmodules.xyz/client-go/api/v1"
 	cutil "kmodules.xyz/client-go/conditions"
 )
 
-func (r *MachineReconciler) createMachine() error {
+func (r *MachineReconciler) createMachine(ctx context.Context) error {
 	if cutil.IsConditionTrue(r.machineObj.Status.Conditions, api.MachineConditionMachineCreating) ||
 		cutil.IsConditionTrue(r.machineObj.Status.Conditions, string(api.MachineConditionTypeMachineReady)) {
 		return nil
 	}
 
-	err := r.createPrerequisitesForMachine()
+	err := r.createPrerequisitesForMachine(ctx)
 	if err != nil {
 		return err
 	}
-	args, err := r.getMachineCreationArgs()
+	args, err := r.getMachineCreationArgs(ctx)
 	if err != nil {
 		return err
 	}
-	r.log.Info("Creating Machine", "Cloud", r.machineObj.Spec.Driver)
+	r.log.Info("Creating Machine", "MachineName", r.machineObj.Name, "Driver", r.machineObj.Spec.Driver)
 
 	cutil.MarkTrue(r.machineObj, api.MachineConditionMachineCreating)
 	cmd := exec.Command("docker-machine", args...)
@@ -63,19 +64,18 @@ func (r *MachineReconciler) createMachine() error {
 	}
 
 	cutil.MarkTrue(r.machineObj, api.MachineConditionTypeMachineReady)
-	r.log.Info("Created Docker Machine Successfully")
+	r.log.Info("Created Docker Machine Successfully", "MachineName", r.machineObj.Name, "Driver", r.machineObj.Spec.Driver)
 	return nil
 }
 
-func (r *MachineReconciler) createPrerequisitesForMachine() error {
-	var err error = nil
+func (r *MachineReconciler) createPrerequisitesForMachine(ctx context.Context) error {
 	if r.machineObj.Spec.Driver.Name == AWSDriver {
-		err = r.createAWSEnvironment()
+		return r.createAWSEnvironment(ctx)
 	}
-	return err
+	return nil
 }
 
-func (r *MachineReconciler) getMachineCreationArgs() ([]string, error) {
+func (r *MachineReconciler) getMachineCreationArgs(ctx context.Context) ([]string, error) {
 	var args []string
 	args = append(args, "create", "--driver", r.machineObj.Spec.Driver.Name)
 
@@ -85,9 +85,8 @@ func (r *MachineReconciler) getMachineCreationArgs() ([]string, error) {
 	}
 
 	if r.machineObj.Spec.ScriptRef != nil {
-		scriptArgs, err := r.getStartupScriptArgs()
+		scriptArgs, err := r.getStartupScriptArgs(ctx)
 		if err != nil {
-			r.log.Error(err, "unable to create script")
 			cutil.MarkFalse(r.machineObj, api.MachineConditionTypeScriptReady, api.MachineConditionScriptDataNotFound, kmapi.ConditionSeverityError, "unable to create script")
 			return nil, err
 		}
@@ -95,24 +94,28 @@ func (r *MachineReconciler) getMachineCreationArgs() ([]string, error) {
 		args = append(args, scriptArgs...)
 	}
 
-	authArgs, err := r.getAuthSecretArgs()
+	authArgs, err := r.getAuthSecretArgs(ctx)
 	if err != nil {
-		r.log.Error(err, "unable to read auth data")
 		cutil.MarkFalse(r.machineObj, api.MachineConditionTypeAuthDataReady, api.MachineConditionAuthDataNotFound, kmapi.ConditionSeverityError, "unable to read auth data")
 		return nil, err
 	}
 	cutil.MarkTrue(r.machineObj, api.MachineConditionTypeAuthDataReady)
 	args = append(args, authArgs...)
 
-	args = append(args, r.getAnnotationsArgs()...)
-
+	args = append(args, r.getAnnotationsArgsForAWS()...)
 	args = append(args, r.machineObj.Name)
+
 	return args, nil
 }
 
-func (r *MachineReconciler) getAuthSecretArgs() ([]string, error) {
-	authSecret, err := r.getSecret(r.machineObj.Spec.AuthSecret)
+func (r *MachineReconciler) getAuthSecretArgs(ctx context.Context) ([]string, error) {
+	authSecret, err := r.getSecret(ctx, r.machineObj.Spec.AuthSecret)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			r.log.Info("auth secret is not ready yet", "name", r.machineObj.Spec.AuthSecret)
+		} else {
+			r.log.Error(err, "error in auth secret", "name", r.machineObj.Spec.AuthSecret)
+		}
 		return nil, err
 	}
 	var authArgs []string
@@ -130,24 +133,15 @@ func (r *MachineReconciler) getAuthSecretArgs() ([]string, error) {
 	return authArgs, nil
 }
 
-func (r MachineReconciler) getAnnotationsArgs() []string {
-	var annotationArgs []string
-	if r.machineObj.Spec.Driver.Name == AWSDriver {
-		if r.machineObj.Annotations[awsVPCIDAnnotation] != "" {
-			annotationArgs = append(annotationArgs, "--amazonec2-vpc-id")
-			annotationArgs = append(annotationArgs, r.machineObj.Annotations[awsVPCIDAnnotation])
-		}
-		if r.machineObj.Annotations[awsSubnetIDAnnotation] != "" {
-			annotationArgs = append(annotationArgs, "--amazonec2-subnet-id")
-			annotationArgs = append(annotationArgs, r.machineObj.Annotations[awsSubnetIDAnnotation])
-		}
-	}
-	return annotationArgs
-}
-
-func (r *MachineReconciler) getStartupScriptArgs() ([]string, error) {
-	scriptSecret, err := r.getSecret(r.machineObj.Spec.ScriptRef)
+func (r *MachineReconciler) getStartupScriptArgs(ctx context.Context) ([]string, error) {
+	scriptSecret, err := r.getSecret(ctx, r.machineObj.Spec.ScriptRef)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			r.log.Info("script secret is not ready yet", "name", r.machineObj.Spec.ScriptRef)
+		} else {
+			r.log.Error(err, "error in script secret", "name", r.machineObj.Spec.ScriptRef)
+		}
+
 		return nil, err
 	}
 	var filePath = r.getScriptFilePath()
@@ -183,11 +177,8 @@ func (r *MachineReconciler) getStartupScriptArgs() ([]string, error) {
 	return scriptArgs, nil
 }
 
-func (r *MachineReconciler) getSecret(secretRef *kmapi.ObjectReference) (core.Secret, error) {
+func (r *MachineReconciler) getSecret(ctx context.Context, secretRef *kmapi.ObjectReference) (core.Secret, error) {
 	var secret core.Secret
-	err := r.Client.Get(context.TODO(), secretRef.ObjectKey(), &secret)
-	if err != nil {
-		return core.Secret{}, err
-	}
-	return secret, nil
+	err := r.Client.Get(ctx, secretRef.ObjectKey(), &secret)
+	return secret, err
 }

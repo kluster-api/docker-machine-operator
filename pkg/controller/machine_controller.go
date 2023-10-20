@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-logr/logr"
 	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	cutil "kmodules.xyz/client-go/conditions"
 	"kmodules.xyz/client-go/conditions/committer"
@@ -57,7 +58,11 @@ func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	var machine api.Machine
 	if err := r.Get(ctx, req.NamespacedName, &machine); err != nil {
-		r.log.Error(err, "unable to fetch machine object")
+		if errors.IsNotFound(err) {
+			r.log.Info("Machine object does not exist anymore", "Key", req.NamespacedName)
+		} else {
+			r.log.Error(err, "error processing machine object", "key", req.NamespacedName)
+		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	r.machineObj = machine.DeepCopy()
@@ -69,7 +74,7 @@ func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, commit(ctx, &machine, r.machineObj)
 	}
 
-	rekey, err := r.reconcileDockerMachine()
+	rekey, err := r.reconcileDockerMachine(ctx)
 
 	reconcileResult := ctrl.Result{}
 	if rekey {
@@ -87,15 +92,14 @@ func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	return reconcileResult, commit(ctx, &machine, r.machineObj)
 }
 
-func (r *MachineReconciler) reconcileDockerMachine() (bool, error) {
-	if goForward, err := r.processFinalizer(); !goForward {
+func (r *MachineReconciler) reconcileDockerMachine(ctx context.Context) (bool, error) {
+	if goForward, err := r.processFinalizer(ctx); !goForward {
 		return false, err
 	}
-	err := r.createMachine()
+	err := r.createMachine(ctx)
 	if err != nil {
 		return false, err
 	}
-	r.log.Info("Created Machine. Now waiting for Cluster Creation")
 	rekey, err := r.isScriptFinished()
 	if err != nil {
 		return rekey, err
