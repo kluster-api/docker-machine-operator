@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
 	core "k8s.io/api/core/v1"
@@ -31,6 +32,8 @@ import (
 	kmapi "kmodules.xyz/client-go/api/v1"
 	cutil "kmodules.xyz/client-go/conditions"
 )
+
+const machineCreationTimeout = 15 * time.Minute
 
 func (r *MachineReconciler) createMachine(ctx context.Context) error {
 	if cutil.IsConditionTrue(r.machineObj.Status.Conditions, api.MachineConditionMachineCreating) ||
@@ -48,8 +51,11 @@ func (r *MachineReconciler) createMachine(ctx context.Context) error {
 	}
 	r.log.Info("Creating Machine", "MachineName", r.machineObj.Name, "Driver", r.machineObj.Spec.Driver)
 
+	newCtx, cancel := context.WithTimeout(ctx, machineCreationTimeout)
+	defer cancel()
+
 	cutil.MarkTrue(r.machineObj, api.MachineConditionMachineCreating)
-	cmd := exec.Command("docker-machine", args...)
+	cmd := exec.CommandContext(newCtx, "docker-machine", args...)
 	var commandOutput, commandError bytes.Buffer
 	cmd.Stdout = &commandOutput
 	cmd.Stderr = &commandError
