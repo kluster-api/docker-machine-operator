@@ -217,10 +217,10 @@ func (r *MachineReconciler) createAwsInternetGateway(c *ec2.EC2, vpcId string) e
 }
 func deleteAwsInternetGateway(c *ec2.EC2, gatewayId, vpcId string) error {
 	if err := deleteAwsRoute(c, vpcId); err != nil {
-		klog.Warningf("failed to delete route, ", err.Error())
+		klog.Warningf("failed to delete route, %s", err.Error())
 	}
 	if err := detachInternetGatewayToVPC(c, gatewayId, vpcId); err != nil {
-		klog.Warningf("failed to detach internet gateway to VPC, ", err.Error())
+		klog.Warningf("failed to detach internet gateway to VPC, %s", err.Error())
 	}
 	_, err := c.DeleteInternetGateway(&ec2.DeleteInternetGatewayInput{
 		DryRun:            nil,
@@ -269,7 +269,7 @@ func (r *MachineReconciler) createAwsSubnet(c *ec2.EC2, vpcID string) error {
 func (r *MachineReconciler) deleteAwsSubnet(c *ec2.EC2, subnetId string) error {
 	if r.machineObj.Annotations[awsInternetGatewayIDAnnotation] != "" {
 		if err := deleteAwsInternetGateway(c, r.machineObj.Annotations[awsInternetGatewayIDAnnotation], r.machineObj.Annotations[awsVPCIDAnnotation]); err != nil {
-			klog.Warningf("failed to delete internet gateway, ", err.Error())
+			klog.Warningf("failed to delete internet gateway, %s", err.Error())
 		}
 	}
 	_, err := c.DeleteSubnet(&ec2.DeleteSubnetInput{

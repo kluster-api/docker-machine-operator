@@ -19,6 +19,7 @@ package cmds
 import (
 	"github.com/spf13/cobra"
 	v "gomodules.xyz/x/version"
+	genericapiserver "k8s.io/apiserver/pkg/server"
 )
 
 func NewRootCmd() *cobra.Command {
@@ -27,9 +28,9 @@ func NewRootCmd() *cobra.Command {
 		Short:             `Docker Machine Operator by AppsCode`,
 		DisableAutoGenTag: true,
 	}
-
+	ctx := genericapiserver.SetupSignalContext()
 	rootCmd.AddCommand(v.NewCmdVersion())
-	rootCmd.AddCommand(NewCmdRun())
+	rootCmd.AddCommand(NewCmdRun(ctx))
 
 	return rootCmd
 }
