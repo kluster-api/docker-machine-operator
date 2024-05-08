@@ -20,11 +20,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/go-logr/logr"
 	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
-	"k8s.io/apimachinery/pkg/api/errors"
+
+	"github.com/go-logr/logr"
+	kerr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	cutil "kmodules.xyz/client-go/conditions"
+	"k8s.io/klog/v2"
 	"kmodules.xyz/client-go/conditions/committer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,8 +34,10 @@ import (
 
 // MachineReconciler reconciles a Machine object
 type MachineReconciler struct {
-	client.Client
-	log        logr.Logger
+	ctx        context.Context
+	committer  func(ctx context.Context, old, obj committer.StatusGetter[*api.MachineStatus]) error
+	KBClient   client.Client
+	Log        logr.Logger
 	machineObj *api.Machine
 	Scheme     *runtime.Scheme
 }
@@ -52,59 +55,62 @@ type MachineReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.15.0/pkg/reconcile
 func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	r.log = log.FromContext(ctx)
+	r.Log = log.FromContext(ctx)
 
-	commit := committer.NewStatusCommitter[*api.Machine, *api.MachineStatus](r.Client.Status())
+	r.committer = committer.NewStatusCommitter[*api.Machine, *api.MachineStatus](r.KBClient.Status())
 
-	var machine api.Machine
-	if err := r.Get(ctx, req.NamespacedName, &machine); err != nil {
-		if errors.IsNotFound(err) {
-			r.log.Info("Machine object does not exist anymore", "Key", req.NamespacedName)
-		} else {
-			r.log.Error(err, "error processing machine object", "key", req.NamespacedName)
+	message, err := r.updateMachineReconcile(ctx, req.NamespacedName)
+	if err != nil {
+		if kerr.IsNotFound(err) {
+			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		return r.requeueWithError(message, err)
 	}
-	r.machineObj = machine.DeepCopy()
-
-	cutil.SetSummary(r.machineObj, cutil.WithConditions(api.ConditionsOrder()...))
-	r.machineObj.Status.Phase = api.GetPhase(r.machineObj)
-
-	if machine.Status.Phase == "" {
-		return ctrl.Result{}, commit(ctx, &machine, r.machineObj)
+	if r.machineObj.Status.Phase == "" {
+		return ctrl.Result{}, r.updateMachineStatus(req.NamespacedName)
 	}
 
-	rekey, err := r.reconcileDockerMachine(ctx)
+	if r.isMarkedForDeletion() {
+		if err := r.removeFinalizerAfterCleanup(); err != nil {
+			klog.Errorln(err)
+			return r.requeueWithError("", err)
+		}
+		return r.reconciled()
+	}
 
+	err = r.ensureFinalizer()
+	if err != nil {
+		if kerr.IsNotFound(err) {
+			return r.reconciled()
+		}
+		return r.requeueWithError("Failed to ensure Finalizers", err)
+	}
+
+	err = r.createMachine()
+	if err != nil {
+		return r.requeueWithError("Failed to create Machine", err)
+	}
+
+	rekey, err := r.isScriptFinished()
+	if err != nil {
+		return r.requeueWithError("", err)
+	}
 	reconcileResult := ctrl.Result{}
 	if rekey {
 		reconcileResult.RequeueAfter = time.Minute * 1
 	}
-
-	if err != nil {
-		cErr := commit(ctx, &machine, r.machineObj)
-		if cErr != nil {
-			return reconcileResult, cErr
-		}
-		return reconcileResult, err
-	}
-
-	return reconcileResult, commit(ctx, &machine, r.machineObj)
+	return reconcileResult, r.updateMachineStatus(req.NamespacedName)
 }
 
-func (r *MachineReconciler) reconcileDockerMachine(ctx context.Context) (bool, error) {
-	if goForward, err := r.processFinalizer(ctx); !goForward {
-		return false, err
+func (r *MachineReconciler) updateMachineReconcile(ctx context.Context, namespacedName client.ObjectKey) (string, error) {
+	machine := &api.Machine{}
+	if err := r.KBClient.Get(ctx, namespacedName, machine); err != nil {
+		return "Failed to get Machine", err
 	}
-	err := r.createMachine(ctx)
-	if err != nil {
-		return false, err
-	}
-	rekey, err := r.isScriptFinished()
-	if err != nil {
-		return rekey, err
-	}
-	return rekey, nil
+	r.machineObj = machine
+	r.ctx = ctx
+
+	return "", nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

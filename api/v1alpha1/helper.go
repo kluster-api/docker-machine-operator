@@ -26,19 +26,21 @@ import (
 type MachinePhase string
 
 const (
-	MachineConditionTypeMachineReady   kmapi.ConditionType = "MachineReady"
-	MachineConditionTypeScriptReady    kmapi.ConditionType = "ScriptReady"
-	MachineConditionTypeAuthDataReady  kmapi.ConditionType = "AuthDataReady"
-	MachineConditionTypeScriptComplete kmapi.ConditionType = "ScriptComplete"
+	MachineConditionTypeMachineReady             kmapi.ConditionType = "MachineReady"
+	MachineConditionTypeScriptReady              kmapi.ConditionType = "ScriptReady"
+	MachineConditionTypeAuthDataReady            kmapi.ConditionType = "AuthDataReady"
+	MachineConditionTypeClusterOperationComplete kmapi.ConditionType = "ClusterOperationComplete"
+	MachineConditionTypeMachineCreating          kmapi.ConditionType = "MachineCreating"
 )
 
 const (
-	MachineConditionClusterOperationSuccessful = "ClusterOperationSuccessful"
-	MachineConditionClusterOperationFailed     = "ClusterOperationFailed"
-	MachineConditionWaitingForScriptCompletion = "WaitingForScriptCompletion"
-	MachineConditionAuthDataNotFound           = "AuthDataNotFound"
-	MachineConditionScriptDataNotFound         = "ScriptDataNotFound"
-	MachineConditionMachineCreating            = "MachineCreating"
+	ReasonClusterOperationFailed     = "ClusterOperationFailed"
+	ReasonMachineCreationFailed      = "MachineCreationFailed"
+	ReasonWaitingForScriptCompletion = "WaitingForScriptCompletion"
+	ReasonWaitingForScriptRun        = "WaitingForScriptRun"
+	ReasonAuthDataNotFound           = "AuthDataNotFound"
+	ReasonScriptDataNotFound         = "ScriptDataNotFound"
+	ReasonMachineCreating            = "MachineCreating"
 )
 
 const (
@@ -53,8 +55,8 @@ const (
 
 func ConditionsOrder() []kmapi.ConditionType {
 	return []kmapi.ConditionType{
-		MachineConditionTypeScriptComplete,
 		MachineConditionTypeMachineReady,
+		MachineConditionTypeClusterOperationComplete,
 		MachineConditionTypeAuthDataReady,
 		MachineConditionTypeScriptReady,
 	}
@@ -85,20 +87,16 @@ func GetPhase(obj *Machine) MachinePhase {
 		return MachinePhaseSuccess
 	}
 
-	if cond.Reason == MachineConditionAuthDataNotFound ||
-		cond.Reason == MachineConditionScriptDataNotFound {
-		return MachinePhaseInProgress
-	}
-	if cond.Reason == MachineConditionMachineCreating {
-		return MachinePhaseInProgress
-	}
-	if cond.Reason == MachineConditionWaitingForScriptCompletion {
+	if cond.Reason == ReasonWaitingForScriptCompletion {
 		return MachinePhaseWaitingForScriptCompletion
 	}
-	if cond.Reason == MachineConditionClusterOperationFailed {
-		return MachineConditionClusterOperationFailed
+	if cond.Reason == ReasonClusterOperationFailed {
+		return MachinePhaseClusterOperationFailed
 	}
-	return MachinePhaseFailed
+	if cond.Reason == ReasonMachineCreationFailed {
+		return MachinePhaseFailed
+	}
+	return MachinePhaseInProgress
 }
 
 func GetFinalizer() string {

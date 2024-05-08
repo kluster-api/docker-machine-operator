@@ -17,7 +17,6 @@ limitations under the License.
 package controller
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -39,7 +38,7 @@ const (
 	awsInternetGatewayIDAnnotation = "docker-machine-operator/aws-gateway"
 	awsVpcCIDR                     = "10.1.0.0/16"
 	allowAllIPs                    = "0.0.0.0/0"
-	defaultZone                    = "a" //same as rancher amazonec2 driver default zone
+	defaultZone                    = "a" // same as rancher amazonec2 driver default zone
 	regionParameter                = "amazonec2-region"
 )
 
@@ -62,16 +61,16 @@ func (r *MachineReconciler) getAnnotationsArgsForAWS() []string {
 	return annotationArgs
 }
 
-func (r *MachineReconciler) cleanupAWSResources(ctx context.Context) error {
-	c, err := r.awsEC2Client(ctx)
+func (r *MachineReconciler) cleanupAWSResources() error {
+	c, err := r.awsEC2Client()
 	if err != nil {
 		return err
 	}
 	return r.deleteAwsVpc(c, r.machineObj.Annotations[awsVPCIDAnnotation])
 }
 
-func (r *MachineReconciler) getAWSCredentials(ctx context.Context) (*awsAuthCredential, error) {
-	authSecret, err := r.getSecret(ctx, r.machineObj.Spec.AuthSecret)
+func (r *MachineReconciler) getAWSCredentials() (*awsAuthCredential, error) {
+	authSecret, err := r.getSecret(r.machineObj.Spec.AuthSecret)
 	if err != nil {
 		return nil, err
 	}
@@ -91,8 +90,8 @@ func (r *MachineReconciler) getAWSCredentials(ctx context.Context) (*awsAuthCred
 	return &awsCreds, nil
 }
 
-func (r *MachineReconciler) newAWSClientSession(ctx context.Context) (*session.Session, error) {
-	cred, err := r.getAWSCredentials(ctx)
+func (r *MachineReconciler) newAWSClientSession() (*session.Session, error) {
+	cred, err := r.getAWSCredentials()
 	if err != nil {
 		return nil, err
 	}
@@ -109,8 +108,8 @@ func (r *MachineReconciler) newAWSClientSession(ctx context.Context) (*session.S
 	return session, nil
 }
 
-func (r *MachineReconciler) awsEC2Client(ctx context.Context) (*ec2.EC2, error) {
-	sess, err := r.newAWSClientSession(ctx)
+func (r *MachineReconciler) awsEC2Client() (*ec2.EC2, error) {
+	sess, err := r.newAWSClientSession()
 	if err != nil {
 		return nil, err
 	}
@@ -144,6 +143,7 @@ func createAwsRoute(c *ec2.EC2, vpcId, internetGatewayID string) error {
 	klog.Infof("route table updated")
 	return nil
 }
+
 func deleteAwsRoute(c *ec2.EC2, vpcId string) error {
 	out, err := c.DescribeRouteTables(&ec2.DescribeRouteTablesInput{})
 	if err != nil {
@@ -177,6 +177,7 @@ func attachInternetGatewayToVPC(c *ec2.EC2, internetGatewayId, vpcID string) err
 	})
 	return err
 }
+
 func detachInternetGatewayToVPC(c *ec2.EC2, internetGatewayID, vpcID string) error {
 	_, err := c.DetachInternetGateway(&ec2.DetachInternetGatewayInput{
 		InternetGatewayId: &internetGatewayID,
@@ -215,6 +216,7 @@ func (r *MachineReconciler) createAwsInternetGateway(c *ec2.EC2, vpcId string) e
 	klog.Infof("internet gateway is created with id: %s", *out.InternetGateway.InternetGatewayId)
 	return nil
 }
+
 func deleteAwsInternetGateway(c *ec2.EC2, gatewayId, vpcId string) error {
 	if err := deleteAwsRoute(c, vpcId); err != nil {
 		klog.Warningf("failed to delete route, %s", err.Error())
@@ -263,9 +265,10 @@ func (r *MachineReconciler) createAwsSubnet(c *ec2.EC2, vpcID string) error {
 		return err
 	}
 
-	r.log.Info("aws subnet created", "subnet id ", *out.Subnet.SubnetId)
+	r.Log.Info("aws subnet created", "subnet id ", *out.Subnet.SubnetId)
 	return nil
 }
+
 func (r *MachineReconciler) deleteAwsSubnet(c *ec2.EC2, subnetId string) error {
 	if r.machineObj.Annotations[awsInternetGatewayIDAnnotation] != "" {
 		if err := deleteAwsInternetGateway(c, r.machineObj.Annotations[awsInternetGatewayIDAnnotation], r.machineObj.Annotations[awsVPCIDAnnotation]); err != nil {
@@ -283,7 +286,7 @@ func (r *MachineReconciler) deleteAwsSubnet(c *ec2.EC2, subnetId string) error {
 		return err
 	}
 
-	r.log.Info("subnet successfully deleted")
+	r.Log.Info("subnet successfully deleted")
 	return nil
 }
 
@@ -302,6 +305,7 @@ func getVPC(c *ec2.EC2, vpcId *string) (*ec2.Vpc, error) {
 	}
 	return nil, fmt.Errorf("no vpc found with id %s", *vpcId)
 }
+
 func (r *MachineReconciler) createAwsVpc(c *ec2.EC2) error {
 	var vpc *ec2.Vpc
 	var err error
@@ -356,6 +360,7 @@ func (r *MachineReconciler) createAwsVpc(c *ec2.EC2) error {
 	klog.Infof("aws vpc created with id %s", *vpc.VpcId)
 	return nil
 }
+
 func (r *MachineReconciler) deleteAwsVpc(c *ec2.EC2, vpcID string) error {
 	if r.machineObj.Annotations[awsVPCIDAnnotation] == "" {
 		return nil
@@ -410,12 +415,12 @@ func deleteSecurityGroup(c *ec2.EC2, vpcId string) error {
 	return nil
 }
 
-func (r *MachineReconciler) createAWSEnvironment(ctx context.Context) error {
+func (r *MachineReconciler) createAWSEnvironment() error {
 	if r.machineObj.Annotations[awsVPCIDAnnotation] != "" && r.machineObj.Annotations[awsSubnetIDAnnotation] != "" && r.machineObj.Annotations[awsInternetGatewayIDAnnotation] != "" {
 		return nil
 	}
 
-	c, err := r.awsEC2Client(ctx)
+	c, err := r.awsEC2Client()
 	if err != nil {
 		return err
 	}

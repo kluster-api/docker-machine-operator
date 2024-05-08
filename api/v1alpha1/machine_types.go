@@ -22,6 +22,13 @@ import (
 	kmapi "kmodules.xyz/client-go/api/v1"
 )
 
+const (
+	ResourceCodeMachine     = "mc"
+	ResourceKindMachine     = "Machine"
+	ResourceSingularMachine = "machine"
+	ResourcePluralMachine   = "machines"
+)
+
 // MachineSpec defines the desired state of Machine
 type MachineSpec struct {
 	Driver *core.LocalObjectReference `json:"driver"`
@@ -68,16 +75,4 @@ type MachineList struct {
 
 func init() {
 	SchemeBuilder.Register(&Machine{}, &MachineList{})
-}
-
-func (in *Machine) GetStatus() *MachineStatus {
-	return &in.Status
-}
-
-func (in *Machine) GetConditions() kmapi.Conditions {
-	return in.Status.Conditions
-}
-
-func (in *Machine) SetConditions(conditions kmapi.Conditions) {
-	in.Status.Conditions = conditions
 }

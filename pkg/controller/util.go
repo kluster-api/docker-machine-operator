@@ -25,8 +25,14 @@ import (
 	"time"
 
 	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
+
+	"k8s.io/apimachinery/pkg/types"
 	kutil "kmodules.xyz/client-go"
+	kmapi "kmodules.xyz/client-go/api/v1"
 	cu "kmodules.xyz/client-go/client"
+	cutil "kmodules.xyz/client-go/conditions"
+	coreutil "kmodules.xyz/client-go/core/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -43,58 +49,49 @@ const (
 	tempDirectory      = "tmp"
 )
 
-func (r *MachineReconciler) processFinalizer(ctx context.Context) (bool, error) {
-	if r.machineObj.DeletionTimestamp.IsZero() {
-		err := r.ensureFinalizer()
-		if err != nil {
-			return false, err
-		}
-	} else {
-		// Machine Object is Deleted
-		return false, r.removeFinalizerAfterCleanup(ctx)
-	}
-	return true, nil
-}
-
 func (r *MachineReconciler) ensureFinalizer() error {
 	finalizerName := api.GetFinalizer()
 	if !controllerutil.ContainsFinalizer(r.machineObj, finalizerName) {
 		if err := r.patchFinalizer(kutil.VerbCreated, finalizerName); err != nil {
 			return err
 		}
-		r.log.Info(fmt.Sprintf("Finalizer %v added", finalizerName))
+		r.Log.Info(fmt.Sprintf("Finalizer %v added", finalizerName))
 	}
 
 	return nil
 }
 
-func (r *MachineReconciler) removeFinalizerAfterCleanup(ctx context.Context) error {
+func (r *MachineReconciler) removeFinalizerAfterCleanup() error {
 	finalizerName := api.GetFinalizer()
 	if controllerutil.ContainsFinalizer(r.machineObj, finalizerName) {
-		if err := r.cleanupMachineResources(ctx); err != nil {
+		if err := r.updateMachineStatus(types.NamespacedName{Namespace: r.machineObj.Namespace, Name: r.machineObj.Name}); err != nil {
+			return err
+		}
+		if err := r.cleanupMachineResources(); err != nil {
 			return err
 		}
 		if err := r.patchFinalizer(kutil.VerbDeleted, finalizerName); err != nil {
 			return err
 		}
-		r.log.Info(fmt.Sprintf("Finalizer %v removed", finalizerName))
+		r.Log.Info(fmt.Sprintf("Finalizer %v removed", finalizerName))
 	}
 	return nil
 }
 
 func (r *MachineReconciler) patchFinalizer(verbType kutil.VerbType, finalizerName string) error {
-	_, err := cu.CreateOrPatch(context.TODO(), r.Client, r.machineObj, func(object client.Object, createOp bool) client.Object {
+	_, err := cu.CreateOrPatch(context.TODO(), r.KBClient, r.machineObj, func(object client.Object, createOp bool) client.Object {
+		mc := object.(*api.Machine)
 		if verbType == kutil.VerbCreated {
-			controllerutil.AddFinalizer(object, finalizerName)
+			mc.ObjectMeta = coreutil.AddFinalizer(mc.ObjectMeta, finalizerName)
 		} else if verbType == kutil.VerbDeleted {
-			controllerutil.RemoveFinalizer(object, finalizerName)
+			mc.ObjectMeta = coreutil.RemoveFinalizer(mc.ObjectMeta, finalizerName)
 		}
-		return object
+		return mc
 	})
 	return err
 }
 
-func (r *MachineReconciler) cleanupMachineResources(ctx context.Context) error {
+func (r *MachineReconciler) cleanupMachineResources() error {
 	var err error
 	err = r.deleteFiles()
 	if err != nil {
@@ -105,13 +102,13 @@ func (r *MachineReconciler) cleanupMachineResources(ctx context.Context) error {
 		return err
 	}
 	if r.machineObj.Spec.Driver.Name == AWSDriver {
-		err = r.cleanupAWSResources(ctx)
+		err = r.cleanupAWSResources()
 		if err != nil {
 			return err
 		}
 
 	} else if r.machineObj.Spec.Driver.Name == AzureDriver {
-		err = r.deleteAzureResourceGroup(ctx)
+		err = r.deleteAzureResourceGroup()
 		if err != nil {
 			return err
 		}
@@ -142,21 +139,75 @@ func (r *MachineReconciler) deleteDockerMachine() error {
 
 	err := cmd.Run()
 	if err != nil {
-		r.log.Info("Error machine deletion", "Error: ", commandError.String(), "Output: ", commandOutput.String())
+		r.Log.Info("Error machine deletion", "Error: ", commandError.String(), "Output: ", commandOutput.String())
 		return client.IgnoreNotFound(err)
 	}
 	return nil
 }
 
+// reconciled returns an empty result with nil error to signal a successful reconcile
+// to the controller manager
+func (r *MachineReconciler) reconciled() (ctrl.Result, error) {
+	return ctrl.Result{}, nil
+}
+
+// requeueWithError is a wrapper around logging an error message
+// then passes the error through to the controller manager
+func (r *MachineReconciler) requeueWithError(msg string, err error) (ctrl.Result, error) {
+	updErr := r.updateMachineStatus(types.NamespacedName{Namespace: r.machineObj.Namespace, Name: r.machineObj.Name})
+	if updErr != nil {
+		return ctrl.Result{}, updErr
+	}
+	// Info Log the error message and then let the reconciler dump the stacktrace
+	r.Log.Info(msg, "Reason : ", err.Error())
+	return ctrl.Result{}, err
+}
+
+func (r *MachineReconciler) updateMachineStatus(namespacedName client.ObjectKey) error {
+	machine := &api.Machine{}
+	if err := r.KBClient.Get(r.ctx, namespacedName, machine); err != nil {
+		return err
+	}
+	cutil.SetSummary(r.machineObj, cutil.WithConditions(api.ConditionsOrder()...))
+	r.machineObj.Status.Phase = api.GetPhase(r.machineObj)
+
+	if err := r.committer(r.ctx, machine, r.machineObj); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *MachineReconciler) setInitialConditions() error {
+	cutil.MarkFalse(r.machineObj, api.MachineConditionTypeMachineReady, api.ReasonMachineCreating, kmapi.ConditionSeverityError,
+		"Waiting for Machine to become ready")
+	cutil.MarkFalse(r.machineObj, api.MachineConditionTypeClusterOperationComplete, api.ReasonWaitingForScriptRun, kmapi.ConditionSeverityError,
+		"Waiting for Script to run")
+	err := r.updateMachineStatus(types.NamespacedName{Name: r.machineObj.Name, Namespace: r.machineObj.Namespace})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// isMarkedForDeletion determines if the object is marked for deletion
+func (r *MachineReconciler) isMarkedForDeletion() bool {
+	return !r.machineObj.GetDeletionTimestamp().IsZero()
+}
+
+func (r *MachineReconciler) SetLoggerWithReq(req ctrl.Request) {
+	r.Log = ctrl.Log.WithValues(api.ResourceKindMachine, req.NamespacedName)
+}
+
 func (r *MachineReconciler) patchAnnotation(key, value string) error {
-	_, err := cu.CreateOrPatch(context.TODO(), r.Client, r.machineObj, func(object client.Object, createOp bool) client.Object {
-		anno := object.GetAnnotations()
+	_, err := cu.CreateOrPatch(context.TODO(), r.KBClient, r.machineObj, func(object client.Object, createOp bool) client.Object {
+		mc := object.(*api.Machine)
+		anno := mc.GetAnnotations()
 		if anno == nil {
 			anno = make(map[string]string)
 		}
 		anno[key] = value
-		object.SetAnnotations(anno)
-		return object
+		mc.SetAnnotations(anno)
+		return mc
 	})
 	return err
 }
@@ -188,6 +239,7 @@ func waitForState(retry, timeout time.Duration, getStatus func() (bool, error)) 
 	}
 	return fmt.Errorf("failed to get desired status")
 }
+
 func (r *MachineReconciler) getScriptFilePath() string {
 	return fmt.Sprintf("/%s/%s-%s-startup.sh", tempDirectory, r.machineObj.Namespace, r.machineObj.Name)
 }

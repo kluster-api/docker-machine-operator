@@ -19,18 +19,18 @@ package controller
 import (
 	"context"
 
+	dockermachinev1alpha1 "go.klusters.dev/docker-machine-operator/api/v1alpha1"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	dockermachinev1alpha1 "go.klusters.dev/docker-machine-operator/api/v1alpha1"
 )
 
 // DriverReconciler reconciles a Driver object
 type DriverReconciler struct {
-	client.Client
-	Scheme *runtime.Scheme
+	KBClient client.Client
+	Scheme   *runtime.Scheme
 }
 
 //+kubebuilder:rbac:groups=docker-machine.klusters.dev,resources=drivers,verbs=get;list;watch;create;update;patch;delete

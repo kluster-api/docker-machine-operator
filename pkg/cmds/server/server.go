@@ -22,9 +22,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/spf13/pflag"
 	dockermachinev1alpha1 "go.klusters.dev/docker-machine-operator/api/v1alpha1"
 	"go.klusters.dev/docker-machine-operator/pkg/controller"
+
+	"github.com/spf13/pflag"
 	v "gomodules.xyz/x/version"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -41,8 +42,10 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
-var setupLog = log.Log.WithName("setup")
-var scheme = runtime.NewScheme()
+var (
+	setupLog = log.Log.WithName("setup")
+	scheme   = runtime.NewScheme()
+)
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
@@ -106,7 +109,6 @@ func (s *OperatorOptions) AddGoFlags(fs *flag.FlagSet) {
 }
 
 func (s OperatorOptions) Run(ctx context.Context) error {
-
 	klog.Infof("Starting binary version %s+%s ...", v.Version.Version, v.Version.CommitHash)
 
 	ctrl.SetLogger(klogr.New()) // nolint:staticcheck
@@ -138,15 +140,15 @@ func (s OperatorOptions) Run(ctx context.Context) error {
 	}
 
 	if err = (&controller.DriverReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		KBClient: mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Driver")
 		os.Exit(1)
 	}
 	if err = (&controller.MachineReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		KBClient: mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Machine")
 		os.Exit(1)
