@@ -25,6 +25,7 @@ import (
 	"strconv"
 
 	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
+
 	kmapi "kmodules.xyz/client-go/api/v1"
 	cutil "kmodules.xyz/client-go/conditions"
 )
@@ -47,11 +48,11 @@ func (r *MachineReconciler) isScriptFinished() (bool, error) {
 
 	err := cmd.Run()
 	if err != nil {
-		r.log.Info("Waiting for Script Completion. Checking Again in 1 minute. ", "CommandError: ", commandError.String(), "Output: ", commandOutput.String(), "Error: ", err.Error())
-		cutil.MarkFalse(r.machineObj, api.MachineConditionTypeScriptComplete, api.MachineConditionWaitingForScriptCompletion, kmapi.ConditionSeverityError, "failed to check script completion")
+		r.Log.Info("Waiting for Script Completion. Checking Again in 1 minute. ", "CommandError: ", commandError.String(), "Output: ", commandOutput.String(), "Error: ", err.Error())
+		cutil.MarkFalse(r.machineObj, api.MachineConditionTypeClusterOperationComplete, api.ReasonWaitingForScriptCompletion, kmapi.ConditionSeverityError, "waiting for script completion")
 		return true, nil
 	}
-	r.log.Info("Finished Cluster Operation Script.")
+	r.Log.Info("Finished Cluster Operation Script.")
 
 	file, err := os.Open(resultFile)
 	if err != nil {
@@ -64,11 +65,11 @@ func (r *MachineReconciler) isScriptFinished() (bool, error) {
 		if err == nil {
 			var createError error = nil
 			if ret == 0 {
-				r.log.Info("Cluster Operation Finished Successfully")
-				cutil.MarkTrue(r.machineObj, api.MachineConditionTypeScriptComplete)
+				r.Log.Info("Cluster Operation Finished Successfully")
+				cutil.MarkTrue(r.machineObj, api.MachineConditionTypeClusterOperationComplete)
 			} else {
-				r.log.Info("Cluster Operation Failed")
-				cutil.MarkFalse(r.machineObj, api.MachineConditionTypeScriptComplete, api.MachineConditionClusterOperationFailed, kmapi.ConditionSeverityError, "failed to create cluster")
+				r.Log.Info("Cluster Operation Failed")
+				cutil.MarkFalse(r.machineObj, api.MachineConditionTypeClusterOperationComplete, api.ReasonClusterOperationFailed, kmapi.ConditionSeverityError, "failed to create cluster")
 				createError = fmt.Errorf("failed to create cluster")
 			}
 			err := os.Remove(resultFile)
@@ -78,14 +79,14 @@ func (r *MachineReconciler) isScriptFinished() (bool, error) {
 			return false, createError
 
 		} else {
-			r.log.Info("Failed to Check Script Completion", "Error: ", err.Error())
+			r.Log.Info("Failed to Check Script Completion", "Error: ", err.Error())
 		}
 	}
 	return false, fmt.Errorf("failed to create cluster")
 }
 
 func (r *MachineReconciler) getScpArgs() []string {
-	var args = []string{"scp"}
+	args := []string{"scp"}
 	machineName := r.machineObj.Name
 
 	args = append(args, fmt.Sprintf("%s@%s:/tmp/result.txt", r.getDefaultUser(), machineName))

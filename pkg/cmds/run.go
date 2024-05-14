@@ -19,9 +19,10 @@ package cmds
 import (
 	"context"
 
-	"github.com/spf13/cobra"
 	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
 	"go.klusters.dev/docker-machine-operator/pkg/cmds/server"
+
+	"github.com/spf13/cobra"
 	v "gomodules.xyz/x/version"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -30,9 +31,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var (
-	scheme = runtime.NewScheme()
-)
+var scheme = runtime.NewScheme()
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))

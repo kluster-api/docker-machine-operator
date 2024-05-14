@@ -17,7 +17,6 @@ limitations under the License.
 package controller
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -40,9 +39,9 @@ type AzureCredential struct {
 	SubscriptionID string
 }
 
-func (r *MachineReconciler) deleteAzureResourceGroup(ctx context.Context) error {
-	r.log.Info("Deleting Azure Resource Group", "Name", r.machineObj.Name)
-	azureCred, err := r.getAzureCredential(ctx)
+func (r *MachineReconciler) deleteAzureResourceGroup() error {
+	r.Log.Info("Deleting Azure Resource Group", "Name", r.machineObj.Name)
+	azureCred, err := r.getAzureCredential()
 	if err != nil {
 		return err
 	}
@@ -57,19 +56,19 @@ func (r *MachineReconciler) deleteAzureResourceGroup(ctx context.Context) error 
 		return err
 	}
 	resourceGroupName := r.getResourceGroupName()
-	poller, err := rgClient.BeginDelete(ctx, resourceGroupName, nil)
+	poller, err := rgClient.BeginDelete(r.ctx, resourceGroupName, nil)
 	if err != nil {
 		return err
 	}
-	if _, err := poller.PollUntilDone(ctx, nil); err != nil {
+	if _, err := poller.PollUntilDone(r.ctx, nil); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (r *MachineReconciler) getAzureCredential(ctx context.Context) (*AzureCredential, error) {
-	authSecret, err := r.getSecret(ctx, r.machineObj.Spec.AuthSecret)
+func (r *MachineReconciler) getAzureCredential() (*AzureCredential, error) {
+	authSecret, err := r.getSecret(r.machineObj.Spec.AuthSecret)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +91,7 @@ func (r *MachineReconciler) getAzureCredential(ctx context.Context) (*AzureCrede
 func (r *MachineReconciler) getResourceGroupName() string {
 	rgName, ok := r.machineObj.Spec.Parameters[azureResourceGroupParam]
 	if !ok {
-		r.log.Info("Using default resource group docker-machine")
+		r.Log.Info("Using default resource group docker-machine")
 		rgName = defaultAzureResourceGroup
 	}
 	return rgName
