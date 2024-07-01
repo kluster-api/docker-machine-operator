@@ -114,7 +114,7 @@ func (r *MachineReconciler) getMachineCreationArgs() ([]string, error) {
 	}
 	cutil.MarkTrue(r.machineObj, api.MachineConditionTypeAuthDataReady)
 	args = append(args, authArgs...)
-
+	args = append(args, r.getAMIIDArg()...)
 	args = append(args, r.getAnnotationsArgsForAWS()...)
 	args = append(args, r.machineObj.Name)
 
