@@ -71,7 +71,7 @@ func (r *MachineReconciler) createMachine() error {
 	if err != nil && !strings.Contains(commandError.String(), "already exists") {
 		r.Log.Info("Error creating docker machine", "Error: ", commandError.String(), "Output: ", commandOutput.String())
 		cutil.MarkFalse(r.machineObj, api.MachineConditionTypeMachineReady, api.ReasonMachineCreationFailed, kmapi.ConditionSeverityError,
-			fmt.Sprintf("Unable to create docker machine. err : %s", err.Error()))
+			"unable to create docker machine. err: %s", err.Error())
 
 		return err
 	}
