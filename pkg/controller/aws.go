@@ -230,7 +230,7 @@ func deleteAwsInternetGateway(c *ec2.EC2, gatewayId, vpcId string) error {
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "does not exist") {
-			klog.Warningf(err.Error())
+			klog.Warning(err.Error())
 			return nil
 		}
 		return err
@@ -280,7 +280,7 @@ func (r *MachineReconciler) deleteAwsSubnet(c *ec2.EC2, subnetId string) error {
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "does not exist") {
-			klog.Warningf(err.Error())
+			klog.Warning(err.Error())
 			return nil
 		}
 		return err
@@ -379,7 +379,7 @@ func (r *MachineReconciler) deleteAwsVpc(c *ec2.EC2, vpcID string) error {
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "does not exist") {
-			klog.Warningf(err.Error())
+			klog.Warning(err.Error())
 			return nil
 		}
 		return err
@@ -408,7 +408,7 @@ func deleteSecurityGroup(c *ec2.EC2, vpcId string) error {
 			GroupId: sg.GroupId,
 		})
 		if err != nil {
-			klog.Warningf(fmt.Sprintf("failed to delete security group: %s", *sg.GroupId))
+			klog.Warningf("failed to delete security group: %s", *sg.GroupId)
 		}
 		klog.Infof("%s deleted", *sg.GroupId)
 	}
