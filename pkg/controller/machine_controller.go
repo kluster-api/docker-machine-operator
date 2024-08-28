@@ -18,8 +18,9 @@ package controller
 
 import (
 	"context"
-	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
 	"time"
+
+	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
 
 	"github.com/go-logr/logr"
 	kerr "k8s.io/apimachinery/pkg/api/errors"

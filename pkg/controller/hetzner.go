@@ -3,6 +3,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
+
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -11,7 +13,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"time"
 )
 
 func (r *MachineReconciler) createJob() error {
@@ -20,7 +21,7 @@ func (r *MachineReconciler) createJob() error {
 	if err := kc.Get(r.ctx, types.NamespacedName{Name: r.machineObj.Spec.ScriptRef.Name, Namespace: r.machineObj.Spec.ScriptRef.Namespace}, &configSecret, &client.GetOptions{}); err != nil {
 		return err
 	}
-	script := string(configSecret.Data["hetzner-custom-data"])
+	script := string(configSecret.Data["hetzner.sh"])
 	klog.Info("script: ", script)
 	klog.Info("..............Found the Script For Job.............")
 	job := &batchv1.Job{
@@ -36,7 +37,14 @@ func (r *MachineReconciler) createJob() error {
 							Name:  "capi-script",
 							Image: "alpine",
 							Command: []string{
-								script
+								"/etc/capi-script/hetzner.sh",
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "script",
+									ReadOnly:  true,
+									MountPath: "/etc/capi-script",
+								},
 							},
 							/*
 								SecurityContext: &corev1.SecurityContext{
@@ -55,6 +63,16 @@ func (r *MachineReconciler) createJob() error {
 						},
 					},
 					RestartPolicy: corev1.RestartPolicyNever,
+					Volumes: []corev1.Volume{
+						{
+							Name: "script",
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName: r.machineObj.Spec.ScriptRef.Name,
+								},
+							},
+						},
+					},
 				},
 			},
 			BackoffLimit: int32Ptr(4),
@@ -105,10 +123,10 @@ func (r *MachineReconciler) isJobScriptFinished(jobName, namespace string) (bool
 			} else if status == "failed" {
 				return false, nil
 			}
-
 		}
 	}
 }
+
 func checkJobStatus(clientset *kubernetes.Clientset, namespace, jobName string) (string, error) {
 	job, err := clientset.BatchV1().Jobs(namespace).Get(context.TODO(), jobName, metav1.GetOptions{})
 	if err != nil {
