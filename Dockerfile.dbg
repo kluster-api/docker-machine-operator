@@ -12,21 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM alpine
+FROM ubuntu:22.04 as base
 
 ARG TARGETARCH
 
 RUN set -x \
-    && apk add --no-cache ca-certificates \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates wget \
     && wget -O rancher-machine.tar.gz https://github.com/rancher/machine/releases/download/v0.15.0-rancher103/rancher-machine-${TARGETARCH}.tar.gz \
     && tar xzf rancher-machine.tar.gz \
     && chmod +x rancher-machine \
-    && mv rancher-machine docker-machine
+    && mv rancher-machine docker-machine \
+    && rm rancher-machine.tar.gz
 
 
-FROM ghcr.io/appscode/dlv:1.22 as build-env
+FROM ghcr.io/appscode/dlv:1.23 as build-env
 
-FROM {ARG_FROM}
+FROM ubuntu:22.04
 
 LABEL org.opencontainers.image.source https://github.com/cluster-api/docker-machine-operator
 

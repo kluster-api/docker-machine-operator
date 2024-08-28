@@ -29,7 +29,7 @@ CODE_GENERATOR_IMAGE ?= ghcr.io/appscode/gengo:release-1.29
 API_GROUPS           ?= apps:v1alpha1
 
 # Where to push the docker image.
-REGISTRY ?= ghcr.io/appscode
+REGISTRY ?= parvejmia9
 SRC_REG  ?=
 
 # This version-strategy uses git tags to set the version string
@@ -397,7 +397,7 @@ endif
 .PHONY: install
 install:
 	@cd ../installer; \
-	kubectl create ns $(KUBE_NAMESPACE) || true; \
+	#kubectl create ns $(KUBE_NAMESPACE) || true; \
 	kubectl label ns $(KUBE_NAMESPACE) pod-security.kubernetes.io/enforce=restricted; \
 	helm upgrade -i docker-machine-operator charts/docker-machine-operator --wait \
 		--namespace=$(KUBE_NAMESPACE) --create-namespace \

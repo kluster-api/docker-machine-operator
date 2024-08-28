@@ -18,9 +18,8 @@ package controller
 
 import (
 	"context"
-	"time"
-
 	api "go.klusters.dev/docker-machine-operator/api/v1alpha1"
+	"time"
 
 	"github.com/go-logr/logr"
 	kerr "k8s.io/apimachinery/pkg/api/errors"
@@ -55,6 +54,7 @@ type MachineReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.15.0/pkg/reconcile
 func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	klog.Info("........Reconciling Machine........")
 	r.Log = log.FromContext(ctx)
 
 	r.committer = committer.NewStatusCommitter[*api.Machine, *api.MachineStatus](r.KBClient.Status())
@@ -77,6 +77,7 @@ func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 		return r.reconciled()
 	}
+	klog.Info()
 
 	err = r.ensureFinalizer()
 	if err != nil {
@@ -85,17 +86,31 @@ func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 		return r.requeueWithError("Failed to ensure Finalizers", err)
 	}
-
-	err = r.createMachine()
-	if err != nil {
-		return r.requeueWithError("Failed to create Machine", err)
-	}
-
-	rekey, err := r.isScriptFinished()
-	if err != nil {
-		return r.requeueWithError("", err)
-	}
 	reconcileResult := ctrl.Result{}
+	var rekey bool
+	klog.Info("<<<<< Provider: ", r.machineObj.Spec.Parameters["provider"], "   >>>>>")
+	if r.machineObj.Spec.Parameters["provider"] == "" {
+		err = r.createJob()
+		if err != nil {
+			return r.requeueWithError("Failed to Create Job", err)
+		}
+		rekey, err = r.isJobScriptFinished("jb-"+r.machineObj.Spec.ScriptRef.Name, r.machineObj.Spec.ScriptRef.Namespace)
+		if rekey == false {
+			return r.requeueWithError("", err)
+		}
+
+	} else {
+		err = r.createMachine()
+		if err != nil {
+			return r.requeueWithError("Failed to create Machine", err)
+		}
+
+		rekey, err = r.isScriptFinished()
+		if err != nil {
+			return r.requeueWithError("", err)
+		}
+
+	}
 	if rekey {
 		reconcileResult.RequeueAfter = time.Minute * 1
 	}
