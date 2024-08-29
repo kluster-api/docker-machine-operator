@@ -12,6 +12,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -35,7 +36,7 @@ func (r *MachineReconciler) createJob() error {
 					Containers: []corev1.Container{
 						{
 							Name:  "capi-script",
-							Image: "alpine",
+							Image: "debian:12",
 							Command: []string{
 								"/etc/capi-script/hetzner.sh",
 							},
@@ -46,20 +47,6 @@ func (r *MachineReconciler) createJob() error {
 									MountPath: "/etc/capi-script",
 								},
 							},
-							/*
-								SecurityContext: &corev1.SecurityContext{
-								//	AllowPrivilegeEscalation: boolPtr(false), // Do not allow privilege escalation
-								//	Capabilities: &corev1.Capabilities{
-								//		Drop: []corev1.Capability{"ALL"}, // Drop all capabilities
-								//	},
-								//	RunAsUser:    int64Ptr(65534), // Run as 'nobody' user (UID 65534)
-								//	RunAsGroup:   int64Ptr(65534), // Run as 'nobody' group (GID 65534)
-								//	RunAsNonRoot: boolPtr(false),  // Ensure the container runs as a non-root user
-								//	SeccompProfile: &corev1.SeccompProfile{
-								//		Type: corev1.SeccompProfileTypeRuntimeDefault, // Use default seccomp profile
-								//	},
-								//},
-							*/
 						},
 					},
 					RestartPolicy: corev1.RestartPolicyNever,
@@ -68,14 +55,15 @@ func (r *MachineReconciler) createJob() error {
 							Name: "script",
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: r.machineObj.Spec.ScriptRef.Name,
+									SecretName:  r.machineObj.Spec.ScriptRef.Name,
+									DefaultMode: ptr.To(int32(0o755)),
 								},
 							},
 						},
 					},
 				},
 			},
-			BackoffLimit: int32Ptr(4),
+			BackoffLimit: int32Ptr(0),
 		},
 	}
 	err := kc.Create(r.ctx, job)
@@ -106,7 +94,7 @@ func (r *MachineReconciler) isJobScriptFinished(jobName, namespace string) (bool
 		panic(err.Error())
 	}
 
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	for {

@@ -88,9 +88,9 @@ func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return r.requeueWithError("Failed to ensure Finalizers", err)
 	}
 	reconcileResult := ctrl.Result{}
-	var rekey bool
-	klog.Info("<<<<< Provider: ", r.machineObj.Spec.Parameters["provider"], "   >>>>>")
-	if r.machineObj.Spec.Parameters["provider"] == "" {
+	rekey := false
+
+	if r.machineObj.Spec.Parameters["provider"] == "hetzner" {
 		err = r.createJob()
 		if err != nil {
 			return r.requeueWithError("Failed to Create Job", err)
