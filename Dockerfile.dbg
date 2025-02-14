@@ -24,7 +24,7 @@ RUN set -x \
     && mv rancher-machine docker-machine
 
 
-FROM ghcr.io/appscode/dlv:1.23
+FROM ghcr.io/appscode/dlv:1.24
 
 FROM {ARG_FROM}
 
