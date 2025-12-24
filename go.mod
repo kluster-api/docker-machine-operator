@@ -1,6 +1,6 @@
 module go.klusters.dev/docker-machine-operator
 
-go 1.22.0
+go 1.23.0
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.5.1
@@ -107,7 +107,7 @@ require (
 	golang.org/x/crypto v0.21.0 // indirect
 	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e // indirect
 	golang.org/x/net v0.23.0 // indirect
-	golang.org/x/oauth2 v0.13.0 // indirect
+	golang.org/x/oauth2 v0.27.0 // indirect
 	golang.org/x/sync v0.6.0 // indirect
 	golang.org/x/sys v0.18.0 // indirect
 	golang.org/x/term v0.18.0 // indirect
@@ -121,7 +121,6 @@ require (
 	gomodules.xyz/pointer v0.1.0 // indirect
 	gomodules.xyz/sets v0.2.1 // indirect
 	gomodules.xyz/wait v0.2.0 // indirect
-	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20230803162519-f966b187b2e5 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20230726155614-23370e0ffb3e // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230822172742-b8732ec3820d // indirect
