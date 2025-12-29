@@ -81,9 +81,10 @@ func (r *MachineReconciler) removeFinalizerAfterCleanup() error {
 func (r *MachineReconciler) patchFinalizer(verbType kutil.VerbType, finalizerName string) error {
 	_, err := cu.CreateOrPatch(context.TODO(), r.KBClient, r.machineObj, func(object client.Object, createOp bool) client.Object {
 		mc := object.(*api.Machine)
-		if verbType == kutil.VerbCreated {
+		switch verbType {
+		case kutil.VerbCreated:
 			mc.ObjectMeta = coreutil.AddFinalizer(mc.ObjectMeta, finalizerName)
-		} else if verbType == kutil.VerbDeleted {
+		case kutil.VerbDeleted:
 			mc.ObjectMeta = coreutil.RemoveFinalizer(mc.ObjectMeta, finalizerName)
 		}
 		return mc
@@ -101,13 +102,14 @@ func (r *MachineReconciler) cleanupMachineResources() error {
 	if err != nil {
 		return err
 	}
-	if r.machineObj.Spec.Driver.Name == AWSDriver {
+	switch r.machineObj.Spec.Driver.Name {
+	case AWSDriver:
 		err = r.cleanupAWSResources()
 		if err != nil {
 			return err
 		}
 
-	} else if r.machineObj.Spec.Driver.Name == AzureDriver {
+	case AzureDriver:
 		err = r.deleteAzureResourceGroup()
 		if err != nil {
 			return err
